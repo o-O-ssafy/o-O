@@ -184,8 +184,8 @@ export default function CytoscapeCanvas({
         const pos = draggedNode.position();
 
         // 단일 노드만 업데이트 (성능 최적화)
-        if (onNodePositionChange) {
-          onNodePositionChange(id, pos.x, pos.y);
+        if (onBatchNodePositionChange) {
+          onBatchNodePositionChange([{ id, x: pos.x, y: pos.y }]);
         }
       }
 
@@ -198,7 +198,7 @@ export default function CytoscapeCanvas({
     return () => {
       cy.off("dragfree", "node", handleDragFree);
     };
-  }, [cyReady, onNodePositionChange, forceOverlayUpdate]);
+  }, [cyReady, onBatchNodePositionChange, forceOverlayUpdate]);
 
   // pan/zoom → rAF 스로틀로 오버레이 위치 갱신
   useEffect(() => {

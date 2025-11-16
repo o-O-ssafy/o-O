@@ -68,7 +68,7 @@ export function useNodeOperations(params: {
 
     const newNode: NodeData = {
       id: Date.now().toString(),
-      parentId: null,
+      parentId: 0,  // 루트 노드는 parentId: 0
       workspaceId: parseInt(workspaceId, 10),
       type: 'text',
       analysisStatus: 'NONE',
@@ -119,7 +119,7 @@ export function useNodeOperations(params: {
 
     const newNode: NodeData = {
       id: Date.now().toString(),
-      parentId: null,
+      parentId: parseInt(parentId, 10),  // 부모 노드의 id (timestamp)를 number로 변환
       workspaceId: parseInt(workspaceId, 10),
       type: 'text',
       analysisStatus: 'NONE',
