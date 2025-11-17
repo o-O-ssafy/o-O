@@ -28,6 +28,9 @@ export default function D3Canvas({
   analyzeSelection,
   selectedNodeId,
   aiRecommendationsMap,
+  trendRecommendationsMap,
+  isLoadingRecommendationsMap,
+  setIsLoadingRecommendations,
   workspaceId,
   isReadOnly = false,
   onNodeSelect,
@@ -45,6 +48,9 @@ export default function D3Canvas({
   onDismissDetachedSelection,
 }: CytoscapeCanvasProps & {
   aiRecommendationsMap?: Map<number, any[]>;
+  trendRecommendationsMap?: Map<number, any[]>;
+  isLoadingRecommendationsMap?: Map<number, boolean>;
+  setIsLoadingRecommendations?: React.Dispatch<React.SetStateAction<Map<number, boolean>>>;
   workspaceId?: string;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -604,6 +610,27 @@ export default function D3Canvas({
                   node.nodeId && aiRecommendationsMap
                     ? aiRecommendationsMap.get(node.nodeId) || []
                     : []
+                }
+                trendRecommendations={
+                  node.nodeId && trendRecommendationsMap
+                    ? trendRecommendationsMap.get(node.nodeId) || []
+                    : []
+                }
+                isLoadingRecommendation={
+                  node.nodeId && isLoadingRecommendationsMap
+                    ? isLoadingRecommendationsMap.get(node.nodeId) || false
+                    : false
+                }
+                setIsLoadingRecommendation={
+                  node.nodeId && setIsLoadingRecommendations
+                    ? (isLoading: boolean) => {
+                        setIsLoadingRecommendations(prev => {
+                          const newMap = new Map(prev);
+                          newMap.set(node.nodeId!, isLoading);
+                          return newMap;
+                        });
+                      }
+                    : undefined
                 }
                 workspaceId={workspaceId}
                 isReadOnly={isReadOnly}

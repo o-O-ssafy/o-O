@@ -112,26 +112,13 @@ export const batchUpdateNodePositions = async (
   );
 };
 
-// AI 분석 요청 (CONTEXTUAL - 맥락 기반 확장)
+// AI 분석 요청 (CONTEXTUAL - 맥락 기반 AI + 트렌드 확장 추천)
+// WebSocket으로 aiList와 trendList를 함께 응답받음
 export const requestNodeAnalysis = async (
   workspaceId: string,
-  nodeId: number,
-  ancestorNodes: Array<{
-    nodeId: number;
-    parentId: number | null;
-    keyword: string;
-    memo: string;
-  }>
+  nodeId: number
 ): Promise<void> => {
-  await apiClient.post(`/mindmap/${workspaceId}/node/${nodeId}/analyze`, {
-    workspaceId: Number(workspaceId),
-    nodeId,
-    contentUrl: null,
-    contentType: "TEXT",
-    prompt: null,
-    analysisType: "CONTEXTUAL",
-    nodes: ancestorNodes,
-  });
+  await apiClient.post(`/mindmap/${workspaceId}/node/${nodeId}/analyze`, {});
 };
 
 // Creates initial mindmap with content (text/video)

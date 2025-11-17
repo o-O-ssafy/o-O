@@ -16,6 +16,7 @@ export default function RadialToolGroup({
   focusedButton = null,
   centerX = 0,
   centerY = 0,
+  onClose,
   onDelete,
   onEdit,
   onAdd,
@@ -137,8 +138,18 @@ export default function RadialToolGroup({
   };
 
   const content = (
-    <div style={containerStyle}>
-      {items.map((it, i) => {
+    <>
+      {/* 배경 오버레이 - 클릭 시 닫기 */}
+      {onClose && (
+        <div
+          className="fixed inset-0 z-[9998]"
+          style={{ pointerEvents: 'auto' }}
+          onClick={onClose}
+        />
+      )}
+
+      <div style={containerStyle}>
+        {items.map((it, i) => {
         // focusedButton이 있으면 해당 버튼만 표시, 없으면 모두 표시
         const shouldShow = focusedButton === null || focusedButton === it.key;
 
@@ -185,7 +196,8 @@ export default function RadialToolGroup({
           </div>
         );
       })}
-    </div>
+      </div>
+    </>
   );
 
   return createPortal(content, document.body);

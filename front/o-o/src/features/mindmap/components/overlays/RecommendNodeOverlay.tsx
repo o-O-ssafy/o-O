@@ -17,11 +17,15 @@ export default function RecommendNodeOverlay({
   selectedNodeY,
   trendRecommendations = [],
   aiRecommendations = [],
+  isLoading = false,
 }: RecommendNodeOverlayProps) {
   if (!open) return null;
 
   // 각도와 반지름으로 위치 계산
-  const getPosition = (angle: number, r: number = RECOMMENDATION_LAYOUT_CONFIG.radius) => {
+  const getPosition = (
+    angle: number,
+    r: number = RECOMMENDATION_LAYOUT_CONFIG.radius
+  ) => {
     const rad = (angle * Math.PI) / 180;
     return {
       x: Math.cos(rad) * r,
@@ -49,6 +53,38 @@ export default function RecommendNodeOverlay({
       >
         <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-full shadow-lg">
           <Icon className="w-5 h-5" style={{ color: theme.iconColor }} />
+        </div>
+      </div>
+    );
+  };
+
+  // 로딩 스켈레톤 렌더링
+  const renderLoadingSkeleton = (
+    type: RecommendationType,
+    angle: number,
+    index: number
+  ) => {
+    const { x, y } = getPosition(angle);
+    const theme = RECOMMENDATION_THEME[type];
+    const bgColor = theme.nodeColor;
+
+    return (
+      <div
+        key={`loading-${type}-${index}`}
+        className="absolute pointer-events-none"
+        style={{
+          top: "50%",
+          left: "50%",
+          transform: `translate(-50%, -50%) translate(${x}px, ${y}px)`,
+          transition: `all ${RECOMMENDATION_LAYOUT_CONFIG.transitionDuration}ms ease ${index * RECOMMENDATION_LAYOUT_CONFIG.transitionStagger}ms`,
+          opacity: open ? 1 : 0,
+        }}
+      >
+        <div
+          className="w-24 h-24 rounded-full flex items-center justify-center shadow-lg animate-pulse"
+          style={{ background: createRadialGradient(bgColor) }}
+        >
+          <div className="w-16 h-4 bg-white/30 rounded-full" />
         </div>
       </div>
     );
@@ -95,29 +131,93 @@ export default function RecommendNodeOverlay({
   };
 
   const content = (
-    <div className="fixed inset-0 pointer-events-none z-[9999]">
+    <div
+      className="fixed inset-0 pointer-events-auto z-[9999]"
+      onClick={onClose}
+    >
       <div
         className="absolute"
         style={{
           left: `${selectedNodeX}px`,
           top: `${selectedNodeY}px`,
-          transform: 'translate(-50%, -50%)',
+          transform: "translate(25%, 25%)",
         }}
+        onClick={(e) => e.stopPropagation()}
       >
-        {/* AI 아이콘 */}
-        {renderIconButton("ai", RECOMMENDATION_THEME.ai.angles[0])}
+        {isLoading ? (
+          // 로딩 상태: 스켈레톤 표시
+          <>
+            {/* AI 아이콘 */}
+            {renderIconButton("ai", RECOMMENDATION_THEME.ai.angles[0])}
 
-        {/* AI 추천 노드들 */}
-        {aiRecommendations.map((node, index) =>
-          renderRecommendNode(node, RECOMMENDATION_THEME.ai.angles[index + 1], index)
-        )}
+            {/* AI 로딩 스켈레톤 (3개) */}
+            {[0, 1, 2].map((i) =>
+              renderLoadingSkeleton(
+                "ai",
+                RECOMMENDATION_THEME.ai.angles[i + 1],
+                i
+              )
+            )}
 
-        {/* Trend 아이콘 - 추천이 있을 때만 표시 */}
-        {trendRecommendations.length > 0 && renderIconButton("trend", RECOMMENDATION_THEME.trend.angles[0])}
+            {/* Trend 아이콘 */}
+            {renderIconButton("trend", RECOMMENDATION_THEME.trend.angles[0])}
 
-        {/* Trend 추천 노드들 */}
-        {trendRecommendations.map((node, index) =>
-          renderRecommendNode(node, RECOMMENDATION_THEME.trend.angles[index + 1], index)
+            {/* Trend 로딩 스켈레톤 (3개) */}
+            {[0, 1, 2].map((i) =>
+              renderLoadingSkeleton(
+                "trend",
+                RECOMMENDATION_THEME.trend.angles[i + 1],
+                i
+              )
+            )}
+
+            {/* 로딩 메시지 - 노드 위쪽에 배치 */}
+            <div
+              className="absolute pointer-events-none"
+              style={{
+                top: "50%",
+                left: "50%",
+                transform: "translate(-50%, -50%) translateY(-240px)",
+                opacity: open ? 1 : 0,
+                transition: `opacity ${RECOMMENDATION_LAYOUT_CONFIG.transitionDuration}ms ease`,
+              }}
+            >
+              <div className="bg-white px-6 py-3 rounded-full shadow-lg whitespace-nowrap">
+                <p className="text-sm font-paperlogy font-semibold text-gray-700">
+                  ✨ AI가 추천을 생성하고 있어요...
+                </p>
+              </div>
+            </div>
+          </>
+        ) : (
+          // 데이터 로드 완료: 실제 추천 노드 표시
+          <>
+            {/* AI 아이콘 */}
+            {aiRecommendations.length > 0 &&
+              renderIconButton("ai", RECOMMENDATION_THEME.ai.angles[0])}
+
+            {/* AI 추천 노드들 */}
+            {aiRecommendations.map((node, index) =>
+              renderRecommendNode(
+                node,
+                RECOMMENDATION_THEME.ai.angles[index + 1],
+                index
+              )
+            )}
+
+            {/* Trend 아이콘 - 추천이 있을 때만 표시 */}
+            {trendRecommendations.length > 0 &&
+              renderIconButton("trend", RECOMMENDATION_THEME.trend.angles[0])}
+
+            {/* Trend 추천 노드들 */}
+            {trendRecommendations.map((node, index) =>
+              renderRecommendNode(
+                node,
+                RECOMMENDATION_THEME.trend.angles[index + 1],
+                index
+              )
+            )}
+          </>
         )}
 
         {/* 닫기 버튼 */}

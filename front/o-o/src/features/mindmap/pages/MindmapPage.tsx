@@ -82,28 +82,77 @@ const MindmapPageContent: React.FC = () => {
 
   // AI 추천 데이터 저장 (nodeId -> 추천 목록)
   const [aiRecommendationsMap, setAiRecommendationsMap] = useState<Map<number, RecommendNodeData[]>>(new Map());
+  // 트렌드 추천 데이터 저장 (nodeId -> 추천 목록)
+  const [trendRecommendationsMap, setTrendRecommendationsMap] = useState<Map<number, RecommendNodeData[]>>(new Map());
+  // 추천 로딩 상태 (nodeId -> 로딩 여부)
+  const [isLoadingRecommendationsMap, setIsLoadingRecommendationsMap] = useState<Map<number, boolean>>(new Map());
 
-  // AI 추천 데이터 처리 콜백
+  // AI + 트렌드 통합 추천 데이터 처리 콜백
   const handleAiRecommendations = useCallback((data: {
     nodeId: number;
-    nodes: Array<{ keyword: string; memo: string }>;
+    aiList?: Array<{ tempId: string | null; parentId: number | null; keyword: string; memo: string }>;
+    trendList?: Array<{ keyword: string; score: number; rank: number }>;
+    // 기존 형식 호환성 (legacy)
+    nodes?: Array<{ keyword: string; memo: string }>;
   }) => {
-    console.log("[MindmapPage] 🤖 Received AI recommendations for node:", data.nodeId);
+    console.log("[MindmapPage] 🤖 Received AI+Trend recommendations for node:", data.nodeId, data);
 
-    // AI 추천을 RecommendNodeData 형식으로 변환
-    const recommendations: RecommendNodeData[] = data.nodes.map((node, index) => ({
-      id: `ai-${data.nodeId}-${index}`,
-      keyword: node.keyword,
-      memo: node.memo,
-      type: "ai" as const,
-    }));
+    // 새로운 통합 형식 처리
+    if (data.aiList || data.trendList) {
+      // AI 추천 변환
+      const aiRecommendations: RecommendNodeData[] = (data.aiList || []).map((item, index) => ({
+        id: item.tempId || `ai-${data.nodeId}-${index}`,
+        keyword: item.keyword,
+        memo: item.memo,
+        type: "ai" as const,
+      }));
 
-    // Map에 저장
-    setAiRecommendationsMap(prev => {
-      const newMap = new Map(prev);
-      newMap.set(data.nodeId, recommendations);
-      return newMap;
-    });
+      // 트렌드 추천 변환
+      const trendRecommendations: RecommendNodeData[] = (data.trendList || []).map((item, index) => ({
+        id: `trend-${data.nodeId}-${index}`,
+        keyword: item.keyword,
+        type: "trend" as const,
+      }));
+
+      console.log("[MindmapPage] 💾 Storing recommendations - AI:", aiRecommendations.length, "Trend:", trendRecommendations.length);
+
+      // 각각의 Map에 저장
+      setAiRecommendationsMap(prev => {
+        const newMap = new Map(prev);
+        newMap.set(data.nodeId, aiRecommendations);
+        console.log("[MindmapPage] ✅ AI recommendations stored for nodeId:", data.nodeId);
+        return newMap;
+      });
+
+      setTrendRecommendationsMap(prev => {
+        const newMap = new Map(prev);
+        newMap.set(data.nodeId, trendRecommendations);
+        console.log("[MindmapPage] ✅ Trend recommendations stored for nodeId:", data.nodeId);
+        return newMap;
+      });
+
+      // 로딩 상태 종료
+      setIsLoadingRecommendationsMap(prev => {
+        const newMap = new Map(prev);
+        newMap.set(data.nodeId, false);
+        return newMap;
+      });
+    }
+    // 기존 형식 호환성 유지 (legacy)
+    else if (data.nodes) {
+      const recommendations: RecommendNodeData[] = data.nodes.map((node, index) => ({
+        id: `ai-${data.nodeId}-${index}`,
+        keyword: node.keyword,
+        memo: node.memo,
+        type: "ai" as const,
+      }));
+
+      setAiRecommendationsMap(prev => {
+        const newMap = new Map(prev);
+        newMap.set(data.nodeId, recommendations);
+        return newMap;
+      });
+    }
   }, []);
 
   // 6. Collaboration hooks
@@ -645,6 +694,9 @@ const MindmapPageContent: React.FC = () => {
             analyzeSelection={analyzeMode.analyzeSelection}
             selectedNodeId={selectedNodeId}
             aiRecommendationsMap={aiRecommendationsMap}
+            trendRecommendationsMap={trendRecommendationsMap}
+            isLoadingRecommendationsMap={isLoadingRecommendationsMap}
+            setIsLoadingRecommendations={setIsLoadingRecommendationsMap}
             workspaceId={workspaceId}
             isReadOnly={!canEdit}
             onNodeSelect={setSelectedNodeId}

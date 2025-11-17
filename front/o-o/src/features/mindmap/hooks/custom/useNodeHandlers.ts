@@ -5,7 +5,7 @@ import type {
   EditNodePayload,
   NodeData,
 } from "../../types";
-import type { FocusedButton } from './useNodeFocus';
+import type { FocusedButton } from "./useNodeFocus";
 import { requestNodeAnalysis } from "@/services/mindmapService";
 
 type UseNodeHandlersParams = {
@@ -16,7 +16,7 @@ type UseNodeHandlersParams = {
   isSelected: boolean;
   nodeId?: number; // Backend node ID
   workspaceId?: string;
-  allNodes?: NodeData[]; // All nodes for finding ancestors
+  setIsLoadingRecommendation?: (isLoading: boolean) => void; // 로딩 상태 설정 함수
   onSelect: () => void;
   onDeselect: () => void;
   setFocusedButton: (button: FocusedButton) => void;
@@ -41,7 +41,7 @@ export const useNodeHandlers = ({
   isSelected,
   nodeId,
   workspaceId,
-  allNodes,
+  setIsLoadingRecommendation,
   onSelect,
   onDeselect,
   setFocusedButton,
@@ -81,7 +81,7 @@ export const useNodeHandlers = ({
 
   const handleEdit = useCallback(() => {
     startEdit();
-    setFocusedButton('edit');
+    setFocusedButton("edit");
   }, [startEdit, setFocusedButton]);
 
   const handleEditCancel = useCallback(() => {
@@ -99,7 +99,7 @@ export const useNodeHandlers = ({
 
   const handleAdd = useCallback(() => {
     openAddInput();
-    setFocusedButton('add');
+    setFocusedButton("add");
   }, [openAddInput, setFocusedButton]);
 
   const handleAddCancel = useCallback(() => {
@@ -127,7 +127,7 @@ export const useNodeHandlers = ({
   const handlePalette = useCallback(() => {
     const willBeOpen = !paletteOpen;
     togglePalette();
-    setFocusedButton(willBeOpen ? 'palette' : null);
+    setFocusedButton(willBeOpen ? "palette" : null);
   }, [paletteOpen, togglePalette, setFocusedButton]);
 
   const handleColorChange = useCallback(
@@ -146,54 +146,36 @@ export const useNodeHandlers = ({
   }, [closePalette, setFocusedButton]);
 
   const handleRecommend = useCallback(async () => {
-    // AI 추천 요청
-    if (nodeId && workspaceId && allNodes) {
+    // UI 열기
+    setFocusedButton("recommend");
+
+    // AI + 트렌드 통합 추천 요청
+    if (nodeId && workspaceId) {
       try {
-        // 현재 노드부터 루트까지의 조상 경로 찾기
-        const ancestorPath: Array<{ nodeId: number; parentId: number | null; keyword: string; memo: string }> = [];
+        console.log(
+          "[handleRecommend] Requesting AI+Trend analysis for nodeId:",
+          nodeId
+        );
 
-        // 현재 노드 찾기
-        const currentNode = allNodes.find(n => n.id === id);
-        if (!currentNode || !currentNode.nodeId) {
-          console.warn("[handleRecommend] Current node not found or missing nodeId");
-          setFocusedButton('recommend');
-          return;
-        }
+        // 로딩 시작
+        setIsLoadingRecommendation?.(true);
 
-        // 조상 경로 구축 (현재 노드 -> 루트)
-        let node: NodeData | undefined = currentNode;
-        while (node) {
-          ancestorPath.push({
-            nodeId: node.nodeId as number,
-            parentId: typeof node.parentId === 'number' ? node.parentId : null,
-            keyword: node.keyword,
-            memo: node.memo || "",
-          });
+        // AI + 트렌드 통합 분석 요청 (서버에서 맥락을 자동으로 수집)
+        await requestNodeAnalysis(workspaceId, nodeId);
 
-          // 부모 노드 찾기
-          if (!node.parentId) break;
-
-          const parentIdNum: number = typeof node.parentId === 'number'
-            ? node.parentId
-            : Number(node.parentId);
-
-          node = allNodes.find(n => n.nodeId === parentIdNum);
-        }
-
-        console.log("[handleRecommend] Requesting AI analysis with ancestor path:", ancestorPath);
-
-        // AI 분석 요청
-        await requestNodeAnalysis(workspaceId, nodeId, ancestorPath);
-
-        console.log("[handleRecommend] ✅ AI analysis request sent successfully");
+        console.log(
+          "[handleRecommend] ✅ AI+Trend analysis request sent successfully"
+        );
       } catch (error) {
-        console.error("[handleRecommend] Failed to request AI analysis:", error);
+        console.error(
+          "[handleRecommend] Failed to request AI+Trend analysis:",
+          error
+        );
+        // 에러 발생 시 로딩 종료
+        setIsLoadingRecommendation?.(false);
       }
     }
-
-    // UI 열기
-    setFocusedButton('recommend');
-  }, [setFocusedButton, nodeId, workspaceId, allNodes, id]);
+  }, [setFocusedButton, nodeId, workspaceId, setIsLoadingRecommendation]);
 
   const handleRecommendSelect = useCallback(
     (recommendText: string) => {

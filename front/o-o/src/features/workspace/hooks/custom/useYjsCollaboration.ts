@@ -38,7 +38,13 @@ export function useYjsCollaboration(
   roomId: string,
   cursorColor: string,
   options: UseYjsCollaborationOptions & {
-    onAiRecommendation?: (data: { nodeId: number; nodes: Array<{ keyword: string; memo: string }> }) => void;
+    onAiRecommendation?: (data: {
+      nodeId: number;
+      aiList?: Array<{ tempId: string | null; parentId: number | null; keyword: string; memo: string }>;
+      trendList?: Array<{ keyword: string; score: number; rank: number }>;
+      // 기존 형식 호환성 (legacy)
+      nodes?: Array<{ keyword: string; memo: string }>;
+    }) => void;
   } = {}
 ) {
   const { enabled = true, onAuthError, myRole, onAiRecommendation } = options;
@@ -301,9 +307,21 @@ export function useYjsCollaboration(
         client.onJsonMessage((data) => {
           console.log("💬 [useYjsCollaboration] Received JSON message:", data);
 
-          // AI 분석 결과 (status: "SUCCESS", nodes: [...])
-          if (data.status === "SUCCESS" && data.nodes && data.nodeId) {
-            console.log("🤖 AI Recommendation received for node:", data.nodeId);
+          // AI + 트렌드 통합 추천 결과
+          if (data.type === "ai_suggestion" && data.targetNodeId) {
+            console.log("🤖 AI+Trend Recommendation received for node:", data.targetNodeId);
+
+            if (onAiRecommendation) {
+              onAiRecommendation({
+                nodeId: data.targetNodeId,
+                aiList: data.aiList || [],
+                trendList: data.trendList || [],
+              });
+            }
+          }
+          // 기존 AI 분석 결과 형식도 호환성을 위해 유지 (status: "SUCCESS", nodes: [...])
+          else if (data.status === "SUCCESS" && data.nodes && data.nodeId) {
+            console.log("🤖 AI Recommendation (legacy) received for node:", data.nodeId);
 
             if (onAiRecommendation) {
               onAiRecommendation({

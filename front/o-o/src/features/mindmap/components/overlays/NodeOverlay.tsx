@@ -22,8 +22,6 @@ import {
   findNearestNode,
   NODE_RADIUS,
 } from "../../utils/d3Utils";
-import { trendApi } from "@/features/trend/api/trendApi";
-
 function NodeOverlay({
   node,
   x,
@@ -36,6 +34,9 @@ function NodeOverlay({
   allNodes = [], // 🔥 force simulation을 위한 전체 노드 정보
   canvasApi, // 🔥 D3Canvas API (focusOnNode 등)
   aiRecommendations = [], // AI 추천 노드 목록
+  trendRecommendations = [], // 트렌드 추천 노드 목록
+  isLoadingRecommendation = false, // 추천 로딩 상태
+  setIsLoadingRecommendation, // 로딩 상태 설정 함수
   workspaceId,
   isReadOnly = false,
   onSelect,
@@ -61,38 +62,6 @@ function NodeOverlay({
   );
   const [hasMoved, setHasMoved] = useState(false);
   const dragThrottleRef = useRef<number>(0); // 🔥 드래그 중 force simulation 스로틀링
-  const [trendRecommendations, setTrendRecommendations] = useState<
-    RecommendNodeData[]
-  >([]);
-
-  // 노드 선택 해제 시 모달 닫기
-  useEffect(() => {
-    if (!isSelected) {
-      setDetailModalOpen(false);
-    }
-  }, [isSelected]);
-
-  // Fetch trend recommendations when recommend button is clicked
-  const fetchTrendRecommendations = useCallback(async () => {
-    try {
-      const response = await trendApi.getChildTrend(keyword);
-
-      // API 응답에서 상위 3개 키워드를 추출하여 RecommendNodeData 형식으로 변환
-      const recommendations: RecommendNodeData[] = response.items
-        .slice(0, 3)
-        .map((item, index) => ({
-          id: `trend-${index + 1}`,
-          keyword: item.keyword,
-          type: "trend" as const,
-        }));
-
-      setTrendRecommendations(recommendations);
-    } catch (error) {
-      console.error("Failed to fetch trend recommendations:", error);
-      // 에러 발생 시 빈 배열로 설정
-      setTrendRecommendations([]);
-    }
-  }, [keyword]);
 
   const {
     isEditing,
@@ -109,12 +78,13 @@ function NodeOverlay({
     useNodeColorEdit(initialColor);
   const { focusedButton, setFocusedButton } = useNodeFocus();
 
-  // Fetch trend recommendations when recommend overlay opens
+  // 노드 선택 해제 시 모달 및 추천 오버레이 닫기
   useEffect(() => {
-    if (focusedButton === "recommend") {
-      fetchTrendRecommendations();
+    if (!isSelected) {
+      setDetailModalOpen(false);
+      setFocusedButton(null);
     }
-  }, [focusedButton, fetchTrendRecommendations]);
+  }, [isSelected, setFocusedButton]);
 
   const {
     handleDelete,
@@ -137,7 +107,7 @@ function NodeOverlay({
     isSelected,
     nodeId: node.nodeId,
     workspaceId,
-    allNodes,
+    setIsLoadingRecommendation,
     onSelect,
     onDeselect,
     setFocusedButton,
@@ -549,6 +519,7 @@ function NodeOverlay({
             focusedButton={focusedButton}
             centerX={x}
             centerY={y}
+            onClose={onDeselect}
             onDelete={node.nodeId === 1 ? undefined : handleDeleteRequest}
             onEdit={handleEdit}
             onAdd={handleAdd}
@@ -562,7 +533,7 @@ function NodeOverlay({
           />
         )}
 
-        {!isAnalyzeMode && !isReadOnly && focusedButton === "recommend" && (
+        {!isAnalyzeMode && !isReadOnly && focusedButton === "recommend" && isSelected && zoom >= 1.2 && (
           <RecommendNodeOverlay
             open={focusedButton === "recommend"}
             onClose={() => setFocusedButton(null)}
@@ -571,6 +542,7 @@ function NodeOverlay({
             selectedNodeY={y}
             trendRecommendations={trendRecommendations}
             aiRecommendations={aiRecommendations}
+            isLoading={isLoadingRecommendation}
           />
         )}
 
@@ -645,5 +617,7 @@ export default memo(
     prev.hasChildren === next.hasChildren &&
     prev.isSelected === next.isSelected &&
     prev.isAnalyzeSelected === next.isAnalyzeSelected &&
-    prev.detachedSelection?.id === next.detachedSelection?.id
+    prev.detachedSelection?.id === next.detachedSelection?.id &&
+    prev.aiRecommendations === next.aiRecommendations &&
+    prev.trendRecommendations === next.trendRecommendations
 );

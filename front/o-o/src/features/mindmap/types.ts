@@ -74,6 +74,9 @@ export type CytoscapeNodeOverlayProps = {
   allNodes?: NodeData[]; // 🔥 force simulation을 위한 전체 노드 정보
   canvasApi?: any; // D3Canvas mockCy 객체 (focusOnNode 등의 API)
   aiRecommendations?: RecommendNodeData[]; // AI 추천 노드 목록
+  trendRecommendations?: RecommendNodeData[]; // 트렌드 추천 노드 목록
+  isLoadingRecommendation?: boolean; // 추천 로딩 상태
+  setIsLoadingRecommendation?: (isLoading: boolean) => void; // 로딩 상태 설정 함수
   workspaceId?: string; // 워크스페이스 ID (AI 분석 요청에 필요)
   isReadOnly?: boolean;
   onSelect: () => void;
@@ -104,6 +107,7 @@ export type RadialToolGroupProps = Readonly<{
   focusedButton?: "delete" | "add" | "edit" | "palette" | "recommend" | null;
   centerX?: number;
   centerY?: number;
+  onClose?: () => void;
   onDelete?: () => void;
   onEdit?: () => void;
   onAdd?: () => void;
@@ -120,6 +124,7 @@ export type RadialToolGroupProps = Readonly<{
 export type RecommendNodeData = {
   id: string;
   keyword: string;
+  memo?: string; // AI 추천의 경우 메모 포함
   type: "ai" | "trend";
 };
 
@@ -131,6 +136,7 @@ export type RecommendNodeOverlayProps = Readonly<{
   selectedNodeY: number;
   trendRecommendations?: RecommendNodeData[];
   aiRecommendations?: RecommendNodeData[];
+  isLoading?: boolean; // 추천 로딩 상태
 }>;
 
 // Textbox.tsx
