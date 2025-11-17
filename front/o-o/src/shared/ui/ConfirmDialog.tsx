@@ -62,6 +62,32 @@ const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
       onClose={handleClose}
     >
       <div className="relative bg-[#F7FAFF] rounded-none shadow-2xl w-full p-12">
+        {/* X 버튼 (title에 "delete"가 포함된 경우만 표시) */}
+        {title.toLowerCase().includes("delete") ||
+        title.toLowerCase().includes("삭제") ||
+        title.toLowerCase().includes("주의") ? (
+          <button
+            onClick={handleClose}
+            className="absolute top-4 right-4 w-10 h-10 flex items-center justify-center rounded-full hover:bg-gray-200 transition-colors"
+            aria-label="닫기"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        ) : null}
+
         <div className="flex gap-8 items-center">
           {/* Character Image */}
           <div className="flex-shrink-0">
@@ -98,11 +124,11 @@ const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
                   onClick={button.onClick}
                   variant={button.variant}
                   className={`px-8 py-3 text-lg font-semibold
-                    ${
-                      button.variant === "outline"
-                        ? "bg-transparent text-primary hover:underline shadow-none border-none"
-                        : "bg-primary hover:bg-primary/90 text-white"
-                    }`}
+                  ${
+                    button.variant === "outline"
+                      ? "bg-transparent text-primary hover:underline shadow-none border-none"
+                      : "bg-primary hover:bg-primary/90 text-white"
+                  }`}
                   style={{ borderRadius: "13px" }}
                   autoFocus={idx === 0}
                 >
@@ -116,10 +142,10 @@ const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
 
       {/* backdrop 스타일 */}
       <style>{`
-        dialog::backdrop {
-          background: rgba(0,0,0,0.5);
-        }
-      `}</style>
+      dialog::backdrop {
+        background: rgba(0,0,0,0.5);
+      }
+    `}</style>
     </dialog>
   );
 };

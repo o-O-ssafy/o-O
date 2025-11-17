@@ -19,6 +19,7 @@ export function MyPage() {
     loadMore,
     hasNext,
     fetchWorkspacesList,
+    deleteWorkspace,
     activeDates,
     activeDaysLoading,
     activeDaysError,
@@ -28,11 +29,6 @@ export function MyPage() {
     keywordsError,
     fetchKeywordsList,
   } = useMypage();
-
-  console.log("MyPage - view:", view);
-  console.log("MyPage - activeDates:", activeDates);
-  console.log("MyPage - activeDaysLoading:", activeDaysLoading);
-  console.log("MyPage - activeDaysError:", activeDaysError);
 
   const isFullscreen = useFullscreen();
 
@@ -54,7 +50,6 @@ export function MyPage() {
   // 캘린더 데이터 조회
   useEffect(() => {
     if (view === "calendar") {
-      console.log("🔥 캘린더 뷰 - fetchActiveDaysList 호출");
       // 이번 달의 활성 날짜 조회 (기본값 사용)
       fetchActiveDaysList();
     }
@@ -78,6 +73,7 @@ export function MyPage() {
             isFullscreen={isFullscreen}
             hasNext={hasNext}
             onLoadMore={loadMore}
+            onDelete={deleteWorkspace}
           />
         ) : (
           <CalendarView

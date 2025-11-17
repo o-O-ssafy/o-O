@@ -10,6 +10,7 @@ interface DashboardProps {
   readonly isFullscreen?: boolean;
   readonly hasNext?: boolean;
   readonly onLoadMore?: () => void;
+  readonly onDelete?: (projectId: number) => void;
 }
 
 export function Dashboard({
@@ -19,6 +20,7 @@ export function Dashboard({
   isFullscreen = false,
   hasNext = false,
   onLoadMore,
+  onDelete,
 }: DashboardProps) {
 
   // 공통 스타일
@@ -104,6 +106,7 @@ export function Dashboard({
           onLoadMore={onLoadMore}
           hasNext={hasNext}
           isLoading={isLoading}
+          onDelete={onDelete}
         />
       </div>
     </div>

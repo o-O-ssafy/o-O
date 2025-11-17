@@ -14,6 +14,13 @@ export type TreeNode = NodeData & {
 export function buildNodeTree(selectedNodes: NodeData[]): TreeNode[] {
   if (selectedNodes.length === 0) return [];
 
+  console.log('[buildNodeTree] 선택된 노드들:', selectedNodes.map(n => ({
+    keyword: n.keyword,
+    id: n.id,
+    nodeId: (n as any).nodeId,
+    parentId: n.parentId
+  })));
+
   // 1단계: nodeId -> id 매핑 생성 (D3Canvas와 동일한 방식)
   const nodeIdToIdMap = new Map<number, string>();
   for (const node of selectedNodes) {
@@ -22,6 +29,8 @@ export function buildNodeTree(selectedNodes: NodeData[]): TreeNode[] {
       nodeIdToIdMap.set(Number(nodeIdValue), node.id);
     }
   }
+
+  console.log('[buildNodeTree] nodeId -> id 매핑:', Array.from(nodeIdToIdMap.entries()));
 
 
   // 2단계: 모든 노드를 TreeNode로 변환하고 Map에 저장
@@ -53,13 +62,22 @@ export function buildNodeTree(selectedNodes: NodeData[]): TreeNode[] {
       }
     }
 
+    console.log(`[buildNodeTree] ${node.keyword}:`, {
+      parentId: node.parentId,
+      parentIdNum: node.parentId ? Number(node.parentId) : null,
+      actualParentId,
+      hasParentInSelection: actualParentId ? nodeMap.has(actualParentId) : false,
+      willBeRoot: !actualParentId || !nodeMap.has(actualParentId)
+    });
 
-    // 부모가 없거나, 부모가 선택되지 않은 경우 → 루트 노드
+    // 부모가 선택되지 않았거나 없는 경우 → 루트로 표시
     if (!actualParentId || !nodeMap.has(actualParentId)) {
+      console.log(`  → 루트로 추가`);
       roots.push(treeNode);
     } else {
       // 부모가 선택된 경우 → 자식 노드로 추가
       const parent = nodeMap.get(actualParentId)!;
+      console.log(`  → ${parent.keyword}의 자식으로 추가`);
       treeNode.depth = parent.depth + 1;
       parent.children.push(treeNode);
     }
@@ -75,6 +93,19 @@ export function buildNodeTree(selectedNodes: NodeData[]): TreeNode[] {
   };
 
   sortChildren(roots);
+
+  // 트리 구조를 재귀적으로 출력
+  const printTree = (nodes: TreeNode[], indent = 0) => {
+    nodes.forEach(node => {
+      console.log(`${'  '.repeat(indent)}${node.keyword} (depth: ${node.depth}, children: ${node.children.length})`);
+      if (node.children.length > 0) {
+        printTree(node.children, indent + 1);
+      }
+    });
+  };
+
+  console.log('[buildNodeTree] 최종 트리 구조:');
+  printTree(roots);
 
   return roots;
 }

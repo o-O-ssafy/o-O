@@ -140,7 +140,8 @@ export async function calculateRadialLayoutWithForces(
 
   for (const node of nodes) {
     nodeMap.set(node.id, { id: node.id, children: [] });
-    if (!node.parentId || node.parentId === "0") {
+    // nodeId가 1인 노드를 루트로 판단
+    if ("nodeId" in node && (node as any).nodeId === 1) {
       rootId = node.id;
     }
   }

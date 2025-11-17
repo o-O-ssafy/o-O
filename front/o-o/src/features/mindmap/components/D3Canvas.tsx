@@ -5,8 +5,6 @@ import type { CytoscapeCanvasProps, NodeData } from "../types";
 import {
   CANVAS_WIDTH,
   CANVAS_HEIGHT,
-  CANVAS_CENTER_X,
-  CANVAS_CENTER_Y,
   createStraightPath,
   findParentNode,
 } from "../utils/d3Utils";
@@ -29,6 +27,8 @@ export default function D3Canvas({
   mode,
   analyzeSelection,
   selectedNodeId,
+  aiRecommendationsMap,
+  workspaceId,
   isReadOnly = false,
   onNodeSelect,
   onNodeUnselect,
@@ -43,12 +43,16 @@ export default function D3Canvas({
   onKeepChildrenDelete,
   onConnectDetachedSelection,
   onDismissDetachedSelection,
-}: CytoscapeCanvasProps) {
+}: CytoscapeCanvasProps & {
+  aiRecommendationsMap?: Map<number, any[]>;
+  workspaceId?: string;
+}) {
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [transform, setTransform] = useState({ x: 0, y: 0, k: 1 });
   const transformRef = useRef({ x: 0, y: 0, k: 1 });
   const [d3Ready, setD3Ready] = useState(false);
+  const [canvasApi, setCanvasApi] = useState<any>(null);
   const zoomBehaviorRef = useRef<d3.ZoomBehavior<
     SVGSVGElement,
     unknown
@@ -191,11 +195,71 @@ export default function D3Canvas({
           return mockCy;
         },
 
+        // 🔥 focusOnNode - 특정 노드로 카메라 이동
+        focusOnNode: (nodeId: string) => {
+          const targetNode = nodes.find((n) => n.id === nodeId);
+          if (
+            !targetNode ||
+            targetNode.x === undefined ||
+            targetNode.y === undefined
+          ) {
+            console.warn(
+              "[D3Canvas] focusOnNode: 노드를 찾을 수 없거나 좌표가 없음:",
+              nodeId
+            );
+            return mockCy;
+          }
+
+          if (
+            !svgRef.current ||
+            !zoomBehaviorRef.current ||
+            !containerRef.current
+          ) {
+            console.warn(
+              "[D3Canvas] focusOnNode: SVG 또는 zoom behavior가 준비되지 않음"
+            );
+            return mockCy;
+          }
+
+          console.log("[D3Canvas] focusOnNode 호출:", {
+            nodeId,
+            keyword: targetNode.keyword,
+            position: { x: targetNode.x, y: targetNode.y },
+          });
+
+          const svg = d3.select(svgRef.current);
+          const zoom = zoomBehaviorRef.current;
+          const containerWidth = containerRef.current.clientWidth;
+          const containerHeight = containerRef.current.clientHeight;
+
+          // 노드가 화면 중앙에 오도록 transform 계산 (최대 줌 레벨 1.5 적용)
+          const scale = 1.5;
+          const translateX = containerWidth / 2 - targetNode.x * scale;
+          const translateY = containerHeight / 2 - targetNode.y * scale;
+
+          const targetTransform = d3.zoomIdentity
+            .translate(translateX, translateY)
+            .scale(scale);
+
+          console.log("[D3Canvas] focusOnNode transform 적용:", {
+            x: targetTransform.x,
+            y: targetTransform.y,
+            k: targetTransform.k,
+          });
+
+          svg
+            .transition()
+            .duration(500)
+            .call(zoom.transform as any, targetTransform);
+
+          return mockCy;
+        },
         // D3 관련 정보 제공
         _d3Transform: transformRef,
         _d3Container: containerRef,
       };
 
+      setCanvasApi(mockCy);
       onCyReady(mockCy as any);
     }
 
@@ -217,6 +281,8 @@ export default function D3Canvas({
     const viewportWidth = container.clientWidth;
     const viewportHeight = container.clientHeight;
 
+    const PADDING = 300; // 캔버스 경계에 여유 공간 추가 (노드가 잘 보이도록)
+
     const zoom = d3
       .zoom<SVGSVGElement, unknown>()
       .scaleExtent([0.3, 1.5]) // 최소 0.3배(축소), 최대 1.5배(확대)
@@ -225,8 +291,8 @@ export default function D3Canvas({
         [viewportWidth, viewportHeight],
       ]) // 뷰포트 크기
       .translateExtent([
-        [-CANVAS_WIDTH * 0.5, -CANVAS_HEIGHT * 0.5], // 캔버스 왼쪽 위 모서리
-        [CANVAS_WIDTH * 1.5, CANVAS_HEIGHT * 1.5], // 캔버스 오른쪽 아래 모서리
+        [-PADDING, -PADDING], // 캔버스 왼쪽 위에 여유 공간
+        [CANVAS_WIDTH + PADDING, CANVAS_HEIGHT + PADDING], // 캔버스 오른쪽 아래에 여유 공간
       ])
       .filter((event) => {
         // 노드 클릭 이벤트는 zoom에서 제외
@@ -337,117 +403,6 @@ export default function D3Canvas({
   // 노드 렌더링 - SVG 원 비활성화 (NodeOverlay만 사용)
   useEffect(() => {
     if (!svgRef.current || !d3Ready) return;
-
-    // SVG 노드는 렌더링하지 않음 - NodeOverlay(HTML)만 사용
-    // const svg = d3.select(svgRef.current);
-    // const nodesGroup = svg.select<SVGGElement>("g.nodes");
-    // const defs = svg.select<SVGDefsElement>("defs");
-
-    // // 그라데이션 업데이트
-    // clearAllGradients(defs);
-    // createAllGradients(defs, nodes);
-
-    // // 노드 그룹 데이터 바인딩
-    // const nodeGroups = nodesGroup
-    //   .selectAll<SVGGElement, NodeData>("g.node")
-    //   .data(nodes, (d) => d.id);
-
-    // // Enter
-    // const nodeEnter = nodeGroups
-    //   .enter()
-    //   .append("g")
-    //   .attr("class", "node")
-    //   .attr("transform", (d) => `translate(${d.x}, ${d.y})`);
-
-    // // 블러 배경 원
-    // nodeEnter
-    //   .append("circle")
-    //   .attr("class", "blur-bg")
-    //   .attr("r", NODE_RADIUS + 20)
-    //   .attr("fill", (d) => getGradientUrl(d.id))
-    //   .attr("opacity", 0.3)
-    //   .style("filter", "blur(12px)");
-
-    // // 메인 원
-    // nodeEnter
-    //   .append("circle")
-    //   .attr("class", "main-circle")
-    //   .attr("r", NODE_RADIUS)
-    //   .attr("fill", (d) => getGradientUrl(d.id))
-    //   .attr("stroke", "none")
-    //   .style("filter", (d) => getShadowUrl(d.id))
-    //   .style("cursor", mode === "edit" ? "move" : "pointer")
-    //   .on("click", function (event, d) {
-    //     event.stopPropagation();
-    //     if (mode === "edit") {
-    //       if (selectedNodeId === d.id) {
-    //         onNodeUnselect();
-    //       } else {
-    //         onNodeSelect(d.id);
-    //       }
-    //     } else {
-    //       // analyze mode
-    //       onAnalyzeNodeToggle(d.id);
-    //     }
-    //   });
-
-    // // Update
-    // const nodeUpdate = nodeGroups.merge(nodeEnter);
-
-    // nodeUpdate.attr("transform", (d) => `translate(${d.x}, ${d.y})`);
-
-    // nodeUpdate.select("circle.blur-bg").attr("fill", (d) => getGradientUrl(d.id));
-
-    // nodeUpdate
-    //   .select("circle.main-circle")
-    //   .attr("fill", (d) => getGradientUrl(d.id))
-    //   .style("filter", (d) => getShadowUrl(d.id))
-    //   .style("cursor", mode === "edit" ? "move" : "pointer");
-
-    // // Exit
-    // nodeGroups.exit().remove();
-
-    // // 드래그 동작 설정 (편집 모드에서만)
-    // if (mode === "edit") {
-    //   const drag = d3
-    //     .drag<SVGGElement, NodeData>()
-    //     .subject(function (event, d) {
-    //       return d;
-    //     })
-    //     .on("start", function (event, d) {
-    //       d3.select(this).raise();
-    //     })
-    //     .on("drag", function (event, d) {
-    //       // 노드 위치 업데이트
-    //       d.x = event.x;
-    //       d.y = event.y;
-
-    //       // 노드 그룹 이동
-    //       d3.select(this).attr("transform", `translate(${d.x}, ${d.y})`);
-
-    //       // 연결된 엣지 업데이트
-    //       const nodeMap = new Map(nodes.map((n) => [n.id, n]));
-    //       svg
-    //         .selectAll<SVGPathElement, typeof edges[0]>("path.edge")
-    //         .attr("d", (edge) => {
-    //           const source = nodeMap.get(edge.source);
-    //           const target = nodeMap.get(edge.target);
-    //           if (!source || !target) return "";
-    //           return createBezierPath(source, target);
-    //         });
-    //     })
-    //     .on("end", function (event, d) {
-    //       // 드래그 완료 시 위치 저장
-    //       if (onBatchNodePositionChange) {
-    //         onBatchNodePositionChange([{ id: d.id, x: d.x, y: d.y }]);
-    //       }
-    //     });
-
-    //   nodeUpdate.call(drag);
-    // } else {
-    //   // 분석 모드에서는 드래그 비활성화
-    //   nodeUpdate.on(".drag", null);
-    // }
   }, [
     d3Ready,
     nodes,
@@ -477,6 +432,8 @@ export default function D3Canvas({
         const screenY = event.clientY - rect.top;
 
         // 모델 좌표로 변환
+        const t = transformRef.current;
+
         onNodeUnselect();
       }
     };
@@ -641,6 +598,14 @@ export default function D3Canvas({
                 isSelected={isSelected}
                 mode={mode}
                 isAnalyzeSelected={isAnalyzeSelected}
+                allNodes={nodes} // 🔥 모든 노드 정보 전달 (force simulation용)
+                canvasApi={canvasApi} // 🔥 D3Canvas API 전달 (focusOnNode 등)
+                aiRecommendations={
+                  node.nodeId && aiRecommendationsMap
+                    ? aiRecommendationsMap.get(node.nodeId) || []
+                    : []
+                }
+                workspaceId={workspaceId}
                 isReadOnly={isReadOnly}
                 onSelect={() => {
                   if (mode === "analyze") {

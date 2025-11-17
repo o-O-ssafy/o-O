@@ -21,7 +21,15 @@ export const trendApi = {
       {}
     );
 
-    return data;
+    // parentKeyword와 동일한 키워드를 제외하고 상위 7개만 반환
+    const filteredItems = data.items
+      .filter((item) => item.keyword !== data.parentKeyword)
+      .slice(0, 7);
+
+    return {
+      ...data,
+      items: filteredItems,
+    };
   },
 
   // GET /trend/search?keyword=검색어

@@ -48,7 +48,11 @@ export function RemoteCursorsOverlay({
               gap: 4,
             }}
           >
-            <CursorIcon color={peer.color ?? "#3b82f6"} width={20} height={20} />
+            <CursorIcon
+              color={peer.color ?? "#3b82f6"}
+              width={20}
+              height={20}
+            />
             {peer.name && (
               <div
                 style={{

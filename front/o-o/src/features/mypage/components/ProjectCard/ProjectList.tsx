@@ -7,6 +7,7 @@ interface ProjectListProps {
   readonly onLoadMore?: () => void;
   readonly hasNext?: boolean;
   readonly isLoading?: boolean;
+  readonly onDelete?: (projectId: number) => void;
 }
 
 export function ProjectList({
@@ -14,6 +15,7 @@ export function ProjectList({
   onLoadMore,
   hasNext = false,
   isLoading = false,
+  onDelete,
 }: ProjectListProps) {
   const observerTarget = useRef<HTMLDivElement>(null);
 
@@ -57,7 +59,7 @@ export function ProjectList({
     <div className="h-[95%] overflow-y-auto scrollbar-hide p-3">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
         {projects.map((project) => (
-          <ProjectCard key={project.id} project={project} />
+          <ProjectCard key={project.id} project={project} onDelete={onDelete} />
         ))}
       </div>
 

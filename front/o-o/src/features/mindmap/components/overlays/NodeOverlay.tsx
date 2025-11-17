@@ -1,4 +1,4 @@
-import { memo, useCallback, useState, useEffect } from "react";
+import { memo, useCallback, useState, useEffect, useRef } from "react";
 import RadialToolGroup from "./RadialToolGroup";
 import RecommendNodeOverlay from "./RecommendNodeOverlay";
 import NodeEditForm from "./NodeEditForm";
@@ -11,12 +11,18 @@ import { useNodeZIndex } from "../../hooks/custom/useNodeZIndex";
 import { useNodeHandlers } from "../../hooks/custom/useNodeHandlers";
 import { getContrastTextColor } from "@/shared/utils/colorUtils";
 import { createRadialGradient } from "@/shared/utils/gradientUtils";
-import type { CytoscapeNodeOverlayProps } from "../../types";
+import type { CytoscapeNodeOverlayProps, RecommendNodeData } from "../../types";
 import warningPopoImage from "@/shared/assets/images/warning_popo.webp";
 import ConfirmDialog from "../../../../shared/ui/ConfirmDialog";
 import { Button } from "@/components/ui/button";
 import YouTubeIcon from "@mui/icons-material/YouTube";
 import PhotoSizeSelectActualOutlinedIcon from "@mui/icons-material/PhotoSizeSelectActualOutlined";
+import {
+  applyDragForce,
+  findNearestNode,
+  NODE_RADIUS,
+} from "../../utils/d3Utils";
+import { trendApi } from "@/features/trend/api/trendApi";
 
 function NodeOverlay({
   node,
@@ -27,6 +33,10 @@ function NodeOverlay({
   mode,
   isSelected,
   isAnalyzeSelected,
+  allNodes = [], // 🔥 force simulation을 위한 전체 노드 정보
+  canvasApi, // 🔥 D3Canvas API (focusOnNode 등)
+  aiRecommendations = [], // AI 추천 노드 목록
+  workspaceId,
   isReadOnly = false,
   onSelect,
   onDeselect,
@@ -46,8 +56,43 @@ function NodeOverlay({
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
-  const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
+  const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(
+    null
+  );
   const [hasMoved, setHasMoved] = useState(false);
+  const dragThrottleRef = useRef<number>(0); // 🔥 드래그 중 force simulation 스로틀링
+  const [trendRecommendations, setTrendRecommendations] = useState<
+    RecommendNodeData[]
+  >([]);
+
+  // 노드 선택 해제 시 모달 닫기
+  useEffect(() => {
+    if (!isSelected) {
+      setDetailModalOpen(false);
+    }
+  }, [isSelected]);
+
+  // Fetch trend recommendations when recommend button is clicked
+  const fetchTrendRecommendations = useCallback(async () => {
+    try {
+      const response = await trendApi.getChildTrend(keyword);
+
+      // API 응답에서 상위 3개 키워드를 추출하여 RecommendNodeData 형식으로 변환
+      const recommendations: RecommendNodeData[] = response.items
+        .slice(0, 3)
+        .map((item, index) => ({
+          id: `trend-${index + 1}`,
+          keyword: item.keyword,
+          type: "trend" as const,
+        }));
+
+      setTrendRecommendations(recommendations);
+    } catch (error) {
+      console.error("Failed to fetch trend recommendations:", error);
+      // 에러 발생 시 빈 배열로 설정
+      setTrendRecommendations([]);
+    }
+  }, [keyword]);
 
   const {
     isEditing,
@@ -63,6 +108,13 @@ function NodeOverlay({
   const { paletteOpen, togglePalette, closePalette } =
     useNodeColorEdit(initialColor);
   const { focusedButton, setFocusedButton } = useNodeFocus();
+
+  // Fetch trend recommendations when recommend overlay opens
+  useEffect(() => {
+    if (focusedButton === "recommend") {
+      fetchTrendRecommendations();
+    }
+  }, [focusedButton, fetchTrendRecommendations]);
 
   const {
     handleDelete,
@@ -83,6 +135,9 @@ function NodeOverlay({
     y: node.y,
     initialColor,
     isSelected,
+    nodeId: node.nodeId,
+    workspaceId,
+    allNodes,
     onSelect,
     onDeselect,
     setFocusedButton,
@@ -100,13 +155,18 @@ function NodeOverlay({
   });
 
   const handleDeleteRequest = useCallback(() => {
+    // 루트 노드(nodeId === 1)는 삭제 불가
+    if (node.nodeId === 1) {
+      return;
+    }
+
     if (hasChildren) {
       setFocusedButton(null);
       setDeleteDialogOpen(true);
       return;
     }
     handleDelete();
-  }, [hasChildren, handleDelete, setFocusedButton]);
+  }, [node.nodeId, hasChildren, handleDelete, setFocusedButton]);
 
   const handleDeleteDialogClose = useCallback(() => {
     setDeleteDialogOpen(false);
@@ -179,7 +239,13 @@ function NodeOverlay({
 
   const handleMouseMove = useCallback(
     (e: MouseEvent) => {
-      if (!isDragging || !dragStart || !onBatchNodePositionChange) return;
+      if (
+        !isDragging ||
+        !dragStart ||
+        !onBatchNodePositionChange ||
+        isAnalyzeMode
+      )
+        return;
 
       const dx = (e.clientX - dragStart.x) / zoom;
       const dy = (e.clientY - dragStart.y) / zoom;
@@ -192,30 +258,154 @@ function NodeOverlay({
       const newX = node.x + dx;
       const newY = node.y + dy;
 
-      // 드래그 중에는 Y.Map을 업데이트하여 화면상 노드는 움직이되, 위치만 변경
-      onBatchNodePositionChange([{
-        id: node.id,
-        x: newX,
-        y: newY,
-      }]);
+      // 좌표를 100~4900 범위로 제한 (100px 마진으로 노드가 경계에서 잘리지 않도록)
+      const MARGIN = 100;
+      const CANVAS_MIN = MARGIN;
+      const CANVAS_MAX = 5000 - MARGIN;
+      const clampedX = Math.max(CANVAS_MIN, Math.min(CANVAS_MAX, newX));
+      const clampedY = Math.max(CANVAS_MIN, Math.min(CANVAS_MAX, newY));
+
+      // 🔥 드래그 중에는 밀어내기 없이 드래그 노드만 업데이트
+      onBatchNodePositionChange([
+        {
+          id: node.id,
+          x: clampedX,
+          y: clampedY,
+        },
+      ]);
 
       setDragStart({ x: e.clientX, y: e.clientY });
     },
-    [isDragging, dragStart, zoom, node.x, node.y, node.id, onBatchNodePositionChange]
+    [
+      isDragging,
+      dragStart,
+      zoom,
+      node.x,
+      node.y,
+      node.id,
+      onBatchNodePositionChange,
+      isAnalyzeMode,
+    ]
   );
 
   const handleMouseUp = useCallback(() => {
-    // 드래그하지 않고 클릭만 한 경우 onSelect 호출
-    if (!hasMoved && !isAnalyzeMode) {
-      onSelect();
+    // 드래그하지 않고 클릭만 한 경우
+    if (!hasMoved) {
+      if (isAnalyzeMode) {
+        // 분석 모드: 즉시 onSelect 호출 (토글 동작)
+        onSelect();
+      } else {
+        // 편집 모드: 노드 중앙 포커스 후 onSelect 호출
+        // 🔥 노드를 화면 중앙으로 이동하고 최대 줌 레벨로 확대
+        if (canvasApi && canvasApi.focusOnNode) {
+          canvasApi.focusOnNode(node.id);
+
+          // 이미 최대 확대 상태(zoom >= 1.2)라면 짧은 시간(100ms) 후 표시
+          // 그렇지 않으면 애니메이션 완료 후(500ms) 표시
+          const delay = zoom >= 1.2 ? 100 : 500;
+
+          setTimeout(() => {
+            onSelect();
+            // 이미지 또는 비디오 노드인 경우 모달 자동 열기
+            if (node.type === "image" || node.type === "video") {
+              setDetailModalOpen(true);
+            }
+          }, delay);
+        } else {
+          // canvasApi가 없으면 즉시 선택
+          onSelect();
+          // 이미지 또는 비디오 노드인 경우 모달 자동 열기
+          if (node.type === "image" || node.type === "video") {
+            setDetailModalOpen(true);
+          }
+        }
+      }
     }
+
+    // 🔥 드래그 종료 시 주변 노드들을 부드럽게 밀어내기 (편집 모드에서만)
+    if (
+      hasMoved &&
+      !isAnalyzeMode &&
+      allNodes.length > 1 &&
+      onBatchNodePositionChange
+    ) {
+      // Force simulation 적용 (부드럽게 밀어내기)
+      const pushedNodes = applyDragForce(
+        node.id,
+        allNodes.map((n) => ({ id: n.id, x: n.x, y: n.y })),
+        NODE_RADIUS * 4 // 거리 임계값 (약 320px)
+      );
+
+      // 밀려난 노드들의 위치만 업데이트
+      const updates = pushedNodes
+        .filter((p) => p.id !== node.id) // 드래그 노드 제외
+        .map((p) => ({ id: p.id, x: p.x, y: p.y }));
+
+      if (updates.length > 0) {
+        onBatchNodePositionChange(updates);
+      }
+
+      // 가까운 노드 찾기 (거리 임계값 200px 이내)
+      const nearestNode = findNearestNode(
+        { id: node.id, x: node.x, y: node.y },
+        allNodes.map((n) => ({
+          id: n.id,
+          x: n.x,
+          y: n.y,
+          parentId: n.parentId ? String(n.parentId) : null,
+        })),
+        200
+      );
+
+      // 🔥 가까운 노드가 있고, 현재 부모와 다른 경우 부모 재연결
+      if (nearestNode && nearestNode.id !== node.parentId) {
+        const targetNode = allNodes.find((n) => n.id === nearestNode.id);
+
+        // 루트 노드(nodeId가 1)를 드래그한 경우
+        if (node.nodeId === 1) {
+          // 루트 노드는 부모가 변경되지 않고, 대상 노드의 부모를 루트로 변경
+          onEditNode({
+            nodeId: nearestNode.id,
+            newText: targetNode?.keyword,
+            newMemo: targetNode?.memo,
+            newParentId: node.id, // 대상 노드의 부모를 루트로 변경
+          });
+        } else {
+          // 일반 노드를 드래그한 경우: 기존처럼 드래그한 노드의 부모 변경
+          onEditNode({
+            nodeId: node.id,
+            newText: node.keyword,
+            newMemo: node.memo,
+            newParentId: nearestNode.id,
+          });
+        }
+      }
+    }
+
     // 드래그가 끝났을 때는 이미 onEditNode로 Y.Map이 업데이트되어 있음
     // useMindmapSync에서 300ms debounce 후 마지막 업데이트만 서버로 전송됨
 
     setIsDragging(false);
     setDragStart(null);
     setHasMoved(false);
-  }, [hasMoved, isAnalyzeMode, onSelect]);
+  }, [
+    hasMoved,
+    isAnalyzeMode,
+    onSelect,
+    canvasApi,
+    allNodes,
+    node.id,
+    node.x,
+    node.y,
+    node.keyword,
+    node.memo,
+    node.nodeId,
+    node.parentId,
+    node.type,
+    zoom,
+    onBatchNodePositionChange,
+    onEditNode,
+  ]);
 
   // 드래그 이벤트 리스너 등록
   useEffect(() => {
@@ -255,7 +445,7 @@ function NodeOverlay({
         }}
       >
         <div
-          className={`w-40 h-40 rounded-full flex flex-col items-center justify-center ${selectionRingClass}`}
+          className={`w-48 h-48 rounded-full flex flex-col items-center justify-center ${selectionRingClass}`}
           style={{
             background: createRadialGradient(initialColor),
             pointerEvents: "auto", // 노드 원형은 클릭 가능
@@ -291,7 +481,6 @@ function NodeOverlay({
                 <>
                   <div
                     className="rounded-lg mb-1 flex items-center justify-center cursor-pointer hover:opacity-80 transition-opacity"
-                    style={{ pointerEvents: "auto" }}
                     onClick={handleIconClick}
                   >
                     <PhotoSizeSelectActualOutlinedIcon
@@ -311,7 +500,6 @@ function NodeOverlay({
                 <>
                   <div
                     className="rounded-lg mb-1 flex items-center justify-center cursor-pointer hover:opacity-80 transition-opacity"
-                    style={{ pointerEvents: "auto" }}
                     onClick={handleIconClick}
                   >
                     <YouTubeIcon sx={{ fontSize: 60, color: textColor }} />
@@ -349,14 +537,19 @@ function NodeOverlay({
 
         {!isAnalyzeMode && !isReadOnly && (
           <RadialToolGroup
-            open={isSelected && !isEditing && focusedButton !== "recommend"}
+            open={
+              isSelected &&
+              !isEditing &&
+              focusedButton !== "recommend" &&
+              zoom >= 1.2
+            }
             paletteOpen={paletteOpen}
             addInputOpen={showAddInput}
             currentColor={initialColor}
             focusedButton={focusedButton}
             centerX={x}
             centerY={y}
-            onDelete={handleDeleteRequest}
+            onDelete={node.nodeId === 1 ? undefined : handleDeleteRequest}
             onEdit={handleEdit}
             onAdd={handleAdd}
             onAddConfirm={handleAddConfirm}
@@ -376,6 +569,8 @@ function NodeOverlay({
             onSelectRecommendation={handleRecommendSelect}
             selectedNodeX={x}
             selectedNodeY={y}
+            trendRecommendations={trendRecommendations}
+            aiRecommendations={aiRecommendations}
           />
         )}
 
@@ -450,9 +645,5 @@ export default memo(
     prev.hasChildren === next.hasChildren &&
     prev.isSelected === next.isSelected &&
     prev.isAnalyzeSelected === next.isAnalyzeSelected &&
-    prev.detachedSelection?.id === next.detachedSelection?.id &&
-    prev.onCreateChildNode === next.onCreateChildNode &&
-    prev.onKeepChildrenDelete === next.onKeepChildrenDelete &&
-    prev.onConnectDetachedSelection === next.onConnectDetachedSelection &&
-    prev.onDismissDetachedSelection === next.onDismissDetachedSelection
+    prev.detachedSelection?.id === next.detachedSelection?.id
 );

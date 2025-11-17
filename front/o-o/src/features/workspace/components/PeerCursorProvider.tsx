@@ -50,19 +50,43 @@ export function PeerCursorProvider({
     const updatePeers = () => {
       const next: PeerCursor[] = [];
       const selfId = awareness.clientID;
+      const rawStates: Array<[number, unknown]> = [];
 
       for (const [id, state] of awareness.getStates()) {
+        rawStates.push([id, state]);
+
         if (id === selfId) {
           continue;
         }
 
-        const cursor = (state as { cursor?: PeerCursor; user?: { userId?: number; name?: string; email?: string; profileImage?: string; role?: WorkspaceRole } }).cursor;
+        const cursor = (
+          state as {
+            cursor?: PeerCursor;
+            user?: {
+              userId?: number;
+              name?: string;
+              email?: string;
+              profileImage?: string;
+              role?: WorkspaceRole;
+            };
+          }
+        ).cursor;
 
         if (!cursor) {
           continue;
         }
 
-        const userState = (state as { user?: { userId?: number; name?: string; email?: string; profileImage?: string; role?: WorkspaceRole } }).user;
+        const userState = (
+          state as {
+            user?: {
+              userId?: number;
+              name?: string;
+              email?: string;
+              profileImage?: string;
+              role?: WorkspaceRole;
+            };
+          }
+        ).user;
         const peer = {
           id,
           x: cursor.x,

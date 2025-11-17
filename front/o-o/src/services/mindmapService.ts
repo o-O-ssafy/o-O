@@ -1,13 +1,49 @@
 import type { NodeData } from "@/features/mindmap/types";
-import { mapDtoToNodeData, type NodeDTO, type InitialMindmapRequestDTO, type InitialMindmapResponseDTO } from "./dto/mindmap.dto";
+import {
+  mapDtoToNodeData,
+  type NodeDTO,
+  type InitialMindmapRequestDTO,
+  type InitialMindmapResponseDTO,
+} from "./dto/mindmap.dto";
 import { apiClient } from "@/lib/axios";
+
+const CANVAS_MIN = 0;
+const CANVAS_MAX = 5000;
+
+/**
+ * 노드 좌표를 0~5000 범위로 정규화하고, 변경 여부를 표시
+ */
+function clampNodePosition(
+  node: NodeData
+): NodeData & { _wasClamped?: boolean } {
+  if (node.x == null || node.y == null) {
+    return node;
+  }
+
+  const clampedX = Math.max(CANVAS_MIN, Math.min(CANVAS_MAX, node.x));
+  const clampedY = Math.max(CANVAS_MIN, Math.min(CANVAS_MAX, node.y));
+
+  const wasClamped = clampedX !== node.x || clampedY !== node.y;
+
+  return {
+    ...node,
+    x: clampedX,
+    y: clampedY,
+    _wasClamped: wasClamped,
+  };
+}
 
 // Loads the initial node list so we can seed the collaborative Y.Map
 export const fetchMindmapNodes = async (
   workspaceId: string
 ): Promise<NodeData[]> => {
-  const { data } = await apiClient.get<NodeDTO[]>(`/mindmap/${workspaceId}/nodes`);
-  return data.filter((dto) => !dto.deleted).map(mapDtoToNodeData);
+  const { data } = await apiClient.get<NodeDTO[]>(
+    `/mindmap/${workspaceId}/nodes`
+  );
+  return data
+    .filter((dto) => !dto.deleted)
+    .map(mapDtoToNodeData)
+    .map(clampNodePosition);
 };
 
 // Creates a new mindmap node
@@ -74,6 +110,28 @@ export const batchUpdateNodePositions = async (
       })
     )
   );
+};
+
+// AI 분석 요청 (CONTEXTUAL - 맥락 기반 확장)
+export const requestNodeAnalysis = async (
+  workspaceId: string,
+  nodeId: number,
+  ancestorNodes: Array<{
+    nodeId: number;
+    parentId: number | null;
+    keyword: string;
+    memo: string;
+  }>
+): Promise<void> => {
+  await apiClient.post(`/mindmap/${workspaceId}/node/${nodeId}/analyze`, {
+    workspaceId: Number(workspaceId),
+    nodeId,
+    contentUrl: null,
+    contentType: "TEXT",
+    prompt: null,
+    analysisType: "CONTEXTUAL",
+    nodes: ancestorNodes,
+  });
 };
 
 // Creates initial mindmap with content (text/video)

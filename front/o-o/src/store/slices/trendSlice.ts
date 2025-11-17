@@ -37,10 +37,7 @@ export const searchTrendKeywords = createAsyncThunk(
   "trend/searchKeywords",
   async (keyword: string, { getState, rejectWithValue }) => {
     try {
-      console.log("🔍 키워드 검색 중:", keyword);
       const response = await trendApi.getSearchKeywordTrend(keyword);
-      console.log("✅ 키워드 검색 성공:", response);
-      console.log("📊 전체 결과 개수:", response.items.length);
 
       if (response.items.length === 0) {
         return rejectWithValue(`"${keyword}"에 대한 검색 결과가 없습니다.`);
@@ -51,17 +48,15 @@ export const searchTrendKeywords = createAsyncThunk(
         response.items.length === 1 &&
         response.items[0].keyword === keyword
       ) {
-        console.log("✅ 정확한 일치 - keywords 업데이트");
         return {
           ...response,
           items: response.items,
-          isExactMatch: true, // ✅ 플래그 추가
+          isExactMatch: true,
         };
       }
 
       // 5개 이상인 경우 상위 5개 반환
       if (response.items.length > 5) {
-        console.log("✂️ 결과를 5개로 제한 - keywords 업데이트");
         return {
           ...response,
           items: response.items.slice(0, 5),
@@ -70,7 +65,6 @@ export const searchTrendKeywords = createAsyncThunk(
       }
 
       // 2-5개이면서 정확한 일치 아님 → 현재 keywords 반환 (변화 없음)
-      console.log("❌ 2-5개 결과 + 정확한 일치 없음 - 원래 keywords 유지");
       const state = getState() as { trend: TrendState };
       return {
         ...response,
@@ -78,7 +72,6 @@ export const searchTrendKeywords = createAsyncThunk(
         isExactMatch: false,
       };
     } catch (error: any) {
-      console.error("❌ 키워드 검색 실패:", error);
       const message = error.response?.data?.message || "검색에 실패했습니다.";
       return rejectWithValue(message);
     }

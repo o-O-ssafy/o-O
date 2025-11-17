@@ -1,4 +1,5 @@
 import { X } from "lucide-react";
+import { useState, useEffect } from "react";
 import type { NodeData } from "../../types";
 
 interface NodeDetailModalProps {
@@ -16,6 +17,20 @@ export default function NodeDetailModal({
   nodeX,
   nodeY,
 }: Readonly<NodeDetailModalProps>) {
+  const [isVisible, setIsVisible] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      // 500ms 지연 후 모달 표시
+      const timer = setTimeout(() => {
+        setIsVisible(true);
+      }, 500);
+      return () => clearTimeout(timer);
+    } else {
+      setIsVisible(false);
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const { keyword, memo, type, color } = node;
@@ -112,10 +127,12 @@ export default function NodeDetailModal({
 
   return (
     <div
-      className="absolute z-[100] pointer-events-auto"
+      className="absolute z-[100] pointer-events-auto transition-opacity duration-300"
       style={{
-        left: `${nodeX}px`,
-        top: `${nodeY + 100}px`,
+        left: `${nodeX + 250}px`,
+        top: `${nodeY}px`,
+        transform: "translateY(-50%)",
+        opacity: isVisible ? 1 : 0,
       }}
       onClick={(e) => e.stopPropagation()}
     >

@@ -37,9 +37,11 @@ export function useYjsCollaboration(
   wsUrl: string,
   roomId: string,
   cursorColor: string,
-  options: UseYjsCollaborationOptions = {}
+  options: UseYjsCollaborationOptions & {
+    onAiRecommendation?: (data: { nodeId: number; nodes: Array<{ keyword: string; memo: string }> }) => void;
+  } = {}
 ) {
-  const { enabled = true, onAuthError, myRole } = options;
+  const { enabled = true, onAuthError, myRole, onAiRecommendation } = options;
 
   const [collab, setCollab] = useState<{ client: YClient; map: Y.Map<NodeData> } | null>(null);
   const [crud, setCrud] = useState<YMapCrud<NodeData> | null>(null);
@@ -293,6 +295,25 @@ export function useYjsCollaboration(
             "code =", event?.evt?.code,
             "reason =", event?.evt?.reason
           );
+        });
+
+        // JSON 메시지 핸들러 등록
+        client.onJsonMessage((data) => {
+          console.log("💬 [useYjsCollaboration] Received JSON message:", data);
+
+          // AI 분석 결과 (status: "SUCCESS", nodes: [...])
+          if (data.status === "SUCCESS" && data.nodes && data.nodeId) {
+            console.log("🤖 AI Recommendation received for node:", data.nodeId);
+
+            if (onAiRecommendation) {
+              onAiRecommendation({
+                nodeId: data.nodeId,
+                nodes: data.nodes,
+              });
+            }
+          } else {
+            console.log("❓ Unknown message type:", data);
+          }
         });
 
         scheduleConnectionCheck(client);

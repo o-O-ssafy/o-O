@@ -15,8 +15,14 @@ export function useDeleteNodeMutation(workspaceId: string) {
   const queryClient = useQueryClient();
 
   return useMutation<void, Error, DeleteNodeRequest>({
-    mutationFn: ({ nodeId }: DeleteNodeRequest) =>
-      deleteMindmapNode(workspaceId, nodeId),
+    mutationFn: ({ nodeId }: DeleteNodeRequest) => {
+      // 루트 노드(nodeId === 1) 삭제 방지
+      if (nodeId === 1) {
+        console.warn("[useDeleteNodeMutation] 루트 노드는 삭제할 수 없습니다.");
+        return Promise.reject(new Error("루트 노드는 삭제할 수 없습니다."));
+      }
+      return deleteMindmapNode(workspaceId, nodeId);
+    },
     onSuccess: () => {
       // Invalidate nodes query to refetch
       queryClient.invalidateQueries({ queryKey: ["mindmap", "nodes", workspaceId] });

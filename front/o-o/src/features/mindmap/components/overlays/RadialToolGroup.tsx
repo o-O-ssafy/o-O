@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Trash2, Plus, Edit3, Palette, Lightbulb } from "lucide-react";
-import { useRef, type CSSProperties } from "react";
+import { useRef } from "react";
+import type { CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import ColorPalette from "./ColorPalette";
 import NodeAddInput from "./NodeAddInput";
@@ -8,7 +9,7 @@ import type { RadialToolGroupProps } from "../../types";
 
 export default function RadialToolGroup({
   open,
-  radius = 130,
+  radius = 180,
   paletteOpen = false,
   addInputOpen = false,
   currentColor = "#263A6B",
@@ -33,22 +34,26 @@ export default function RadialToolGroup({
   if (!open) return null;
 
   const items = [
-    /* 삭제하기 */
-    {
-      key: "delete",
-      render: (
-        <Button
-          size="icon"
-          className="w-12 h-12 rounded-full bg-red-500 hover:bg-red-600 text-white shadow-lg"
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete?.();
-          }}
-        >
-          <Trash2 className="w-5 h-5" />
-        </Button>
-      ),
-    },
+    /* 삭제하기 - onDelete가 있을 때만 표시 */
+    ...(onDelete
+      ? [
+          {
+            key: "delete" as const,
+            render: (
+              <Button
+                size="icon"
+                className="w-12 h-12 rounded-full bg-red-500 hover:bg-red-600 text-white shadow-lg"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete?.();
+                }}
+              >
+                <Trash2 className="w-5 h-5" />
+              </Button>
+            ),
+          },
+        ]
+      : []),
 
     /* 새 노드 추가 */
     {

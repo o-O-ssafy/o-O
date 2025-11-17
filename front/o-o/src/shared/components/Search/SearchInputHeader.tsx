@@ -21,7 +21,6 @@ const SearchInput = forwardRef<SearchInputHandle, SearchInputProps>(
     // imperative handle로 clear 메서드 노출
     useImperativeHandle(ref, () => ({
       clear: () => {
-        console.log("🧹 SearchInput 초기화");
         setSearchQuery("");
         if (inputRef.current) {
           inputRef.current.value = "";
@@ -30,7 +29,6 @@ const SearchInput = forwardRef<SearchInputHandle, SearchInputProps>(
     }));
 
     const handleSearch = () => {
-      console.log("🔍 검색 버튼 클릭, 검색어:", searchQuery);
       if (onSearch) {
         onSearch(searchQuery);
       }
@@ -38,13 +36,11 @@ const SearchInput = forwardRef<SearchInputHandle, SearchInputProps>(
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       const value = e.target.value;
-      console.log("📝 입력 변경:", value);
       setSearchQuery(value);
     };
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
       if (e.key === "Enter" && !isComposingRef.current) {
-        console.log("⌨️ Enter 키 입력, 검색어:", searchQuery);
         handleSearch();
       }
     };
@@ -59,7 +55,6 @@ const SearchInput = forwardRef<SearchInputHandle, SearchInputProps>(
     ) => {
       isComposingRef.current = false;
       const value = (e.target as HTMLInputElement).value;
-      console.log("📝 한글 입력 완료:", value);
       setSearchQuery(value);
     };
 

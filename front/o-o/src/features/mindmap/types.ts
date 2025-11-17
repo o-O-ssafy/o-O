@@ -71,6 +71,10 @@ export type CytoscapeNodeOverlayProps = {
   isSelected: boolean;
   mode: MindmapMode;
   isAnalyzeSelected: boolean;
+  allNodes?: NodeData[]; // 🔥 force simulation을 위한 전체 노드 정보
+  canvasApi?: any; // D3Canvas mockCy 객체 (focusOnNode 등의 API)
+  aiRecommendations?: RecommendNodeData[]; // AI 추천 노드 목록
+  workspaceId?: string; // 워크스페이스 ID (AI 분석 요청에 필요)
   isReadOnly?: boolean;
   onSelect: () => void;
   onDeselect: () => void;
@@ -125,6 +129,8 @@ export type RecommendNodeOverlayProps = Readonly<{
   onSelectRecommendation: (text: string) => void;
   selectedNodeX: number;
   selectedNodeY: number;
+  trendRecommendations?: RecommendNodeData[];
+  aiRecommendations?: RecommendNodeData[];
 }>;
 
 // Textbox.tsx
@@ -140,7 +146,12 @@ export type TextboxProps = Readonly<{
 
 export type MindmapNodeType = "text" | "image" | "video" | "link";
 
-export type NodeAnalysisStatus = "NONE" | "PENDING" | "PROCESSING" | "DONE" | "FAILED";
+export type NodeAnalysisStatus =
+  | "NONE"
+  | "PENDING"
+  | "PROCESSING"
+  | "DONE"
+  | "FAILED";
 
 export type NodeOperation = "ADD" | "UPDATE" | "DELETE";
 

@@ -42,7 +42,14 @@ export const loadMoreWorkspaces = createAsyncThunk(
 const mypageSlice = createSlice({
   name: "mypage",
   initialState,
-  reducers: {},
+  reducers: {
+    // 워크스페이스 삭제 (로컬 상태만 업데이트)
+    removeWorkspace: (state, action: { payload: number }) => {
+      state.workspaces = state.workspaces.filter(
+        (workspace) => workspace.id !== action.payload
+      );
+    },
+  },
   extraReducers: (builder) => {
     builder
       // fetchWorkspaces - 새로 불러오기 (교체)
@@ -81,4 +88,5 @@ const mypageSlice = createSlice({
   },
 });
 
+export const { removeWorkspace } = mypageSlice.actions;
 export default mypageSlice.reducer;

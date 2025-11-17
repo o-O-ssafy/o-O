@@ -47,4 +47,9 @@ export const mypageApi = {
 
     return data;
   },
+
+  // DELETE /workspace/{workspaceId} - 워크스페이스 삭제
+  deleteWorkspace: async (workspaceId: number): Promise<void> => {
+    await apiClient.delete(`/workspace/${workspaceId}`);
+  },
 };

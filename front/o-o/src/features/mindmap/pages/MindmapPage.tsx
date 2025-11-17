@@ -1,5 +1,6 @@
-import React, { useRef, useMemo, useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import React, { useRef, useMemo, useEffect, useState, useCallback } from "react";
+import type { RecommendNodeData } from "../types";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import type { Core } from "cytoscape";
 import * as d3 from "d3";
 import type { Transform } from "../types";
@@ -34,16 +35,20 @@ import {
   clearPendingImportKeywords,
   convertTrendKeywordsToNodes,
 } from "../utils/importTrendKeywords";
+import { createMindmapNode, fetchMindmapNodes } from "@/services/mindmapService";
 import {
   DEFAULT_WORKSPACE_ID,
   resolveMindmapWsUrl,
 } from "@/constants/mindmapCollaboration";
+import { captureThumbnailAsFile } from "../utils/canvasCapture";
+import { mindmapApi } from "../api/mindmapApi";
 
 const MindmapPageContent: React.FC = () => {
   // 1. Routing & workspace params
   const params = useParams<{ workspaceId?: string }>();
   const workspaceId = params.workspaceId ?? DEFAULT_WORKSPACE_ID;
   const navigate = useNavigate();
+  const location = useLocation();
   const wsUrl = resolveMindmapWsUrl();
 
   // 2. Get workspace info and permissions
@@ -54,6 +59,7 @@ const MindmapPageContent: React.FC = () => {
   const cyRef = useRef<Core | null>(null);
   const canvasContainerRef = useRef<HTMLDivElement | null>(null);
   const [cyReady, setCyReady] = useState(false);
+  const [focusNodeId, setFocusNodeId] = useState<string | null>(null);
 
   // 3a. D3 Transform state management
   const transformRef = useRef<React.MutableRefObject<Transform> | null>(null);
@@ -74,6 +80,32 @@ const MindmapPageContent: React.FC = () => {
     cursorColorRef.current = CURSOR_COLORS[Math.floor(Math.random() * CURSOR_COLORS.length)];
   }
 
+  // AI 추천 데이터 저장 (nodeId -> 추천 목록)
+  const [aiRecommendationsMap, setAiRecommendationsMap] = useState<Map<number, RecommendNodeData[]>>(new Map());
+
+  // AI 추천 데이터 처리 콜백
+  const handleAiRecommendations = useCallback((data: {
+    nodeId: number;
+    nodes: Array<{ keyword: string; memo: string }>;
+  }) => {
+    console.log("[MindmapPage] 🤖 Received AI recommendations for node:", data.nodeId);
+
+    // AI 추천을 RecommendNodeData 형식으로 변환
+    const recommendations: RecommendNodeData[] = data.nodes.map((node, index) => ({
+      id: `ai-${data.nodeId}-${index}`,
+      keyword: node.keyword,
+      memo: node.memo,
+      type: "ai" as const,
+    }));
+
+    // Map에 저장
+    setAiRecommendationsMap(prev => {
+      const newMap = new Map(prev);
+      newMap.set(data.nodeId, recommendations);
+      return newMap;
+    });
+  }, []);
+
   // 6. Collaboration hooks
   const { collab, crud, updateChatState } = useYjsCollaboration(
     wsUrl,
@@ -85,6 +117,7 @@ const MindmapPageContent: React.FC = () => {
         navigate("/"); // 인증 실패 시 홈으로 리다이렉트
       },
       myRole: workspace?.myRole, // 워크스페이스 역할 전달
+      onAiRecommendation: handleAiRecommendations, // AI 추천 데이터 처리
     }
   );
 
@@ -217,6 +250,121 @@ const MindmapPageContent: React.FC = () => {
   // 9. Detached selection hook
   const detachedSelection = useDetachedSelection(nodes, nodeOperations.handleEditNode);
 
+  // 10. 썸네일 캡처 (페이지 언마운트 시 + 브라우저 탭 닫을 때)
+  const thumbnailCapturedRef = useRef(false);
+  const thumbnailCapturePromiseRef = useRef<Promise<void> | null>(null);
+  // 🔥 캔버스 요소를 미리 저장 (popstate 시점에 ref가 null이 되는 문제 해결)
+  const savedCanvasElementRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    // 🔥 뒤로가기 차단 플래그
+    const shouldBlockBackRef = { current: true };
+
+    // 썸네일 캡처 함수 (Promise 저장하여 중복 실행 방지)
+    const captureThumbnail = async () => {
+      // 이미 캡처 중이거나 완료했으면 스킵
+      if (thumbnailCapturedRef.current || thumbnailCapturePromiseRef.current) {
+        return;
+      }
+
+      // 현재 ref 사용 (저장된 요소는 DOM에서 분리되어 html2canvas 실패)
+      const targetElement = canvasContainerRef.current;
+      if (!targetElement) {
+        return;
+      }
+
+      // 캡처 Promise 저장 (중복 실행 방지)
+      thumbnailCapturePromiseRef.current = (async () => {
+        try {
+          const thumbnailFile = await captureThumbnailAsFile(targetElement, {
+            filename: `mindmap-${workspaceId}-thumbnail.png`,
+            maxWidth: 1200,
+            maxHeight: 800,
+          });
+
+          // 서버로 전송
+          await mindmapApi.uploadThumbnail(workspaceId, thumbnailFile);
+          thumbnailCapturedRef.current = true;
+        } catch (error) {
+          console.error('❌ [MindmapPage] Thumbnail capture/upload failed:', error);
+          // 실패 시 다시 시도할 수 있도록 Promise 초기화
+          thumbnailCapturePromiseRef.current = null;
+        }
+      })();
+
+      return thumbnailCapturePromiseRef.current;
+    };
+
+    // 🔥 브라우저 뒤로가기 감지 - 캡처 후 실제 뒤로 가기
+    const handlePopState = async (e: PopStateEvent) => {
+      // 첫 번째 popstate (진짜 사용자 뒤로가기)
+      if (shouldBlockBackRef.current && !thumbnailCapturedRef.current) {
+        // 뒤로가기 취소하고 원래 위치로 복귀
+        e.preventDefault?.(); // 표준 preventDefault (효과 없을 수 있음)
+        history.pushState(null, '', location.pathname);
+
+        // 차단 플래그 해제 (다음 뒤로가기는 허용)
+        shouldBlockBackRef.current = false;
+
+        try {
+          // 캡처 시도 (완료 대기)
+          await captureThumbnail();
+        } catch (error) {
+          console.error('❌ [MindmapPage] Capture failed, but navigation allowed:', error);
+        }
+
+        // 🔥 캡처 완료 후 /mypage로 라우팅
+        setTimeout(() => {
+          navigate('/mypage');
+        }, 100);
+      }
+    };
+
+    // 페이지 숨김 이벤트 (브라우저 탭 닫기, 다른 탭으로 이동 등)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        if (!thumbnailCapturedRef.current) {
+          captureThumbnail();
+        }
+      }
+    };
+
+    // 브라우저 탭 닫기 전 이벤트
+    const handleBeforeUnload = () => {
+      if (!thumbnailCapturedRef.current) {
+        captureThumbnail();
+      }
+    };
+
+    // 🔥 MiniNav에서 발생시키는 커스텀 이벤트 감지
+    const handleMindmapNavigation = (e: Event) => {
+      if (!thumbnailCapturedRef.current) {
+        // 캡처 시작 (비동기지만 완료를 기다리지 않음)
+        captureThumbnail();
+      }
+    };
+
+    // 🔥 뒤로가기 차단을 위한 히스토리 state 추가
+    history.pushState(null, '', location.pathname);
+
+    // 이벤트 리스너 등록
+    window.addEventListener('popstate', handlePopState);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('mindmap-navigation', handleMindmapNavigation);
+
+    // Cleanup
+    return () => {
+
+      window.removeEventListener('popstate', handlePopState);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('mindmap-navigation', handleMindmapNavigation);
+
+      // cleanup에서는 캡처하지 않음 (이미 DOM이 제거 중이라 html2canvas 실패)
+    };
+  }, [workspaceId]);
+
   // 🔥 트렌드 키워드 임포트 (로컬스토리지에서 감지)
   useEffect(() => {
     if (!collab || !crud) return;
@@ -225,39 +373,120 @@ const MindmapPageContent: React.FC = () => {
     const pendingKeywords = getPendingImportKeywords();
     if (!pendingKeywords || pendingKeywords.length === 0) return;
 
-    // viewport 중심 좌표 계산
-    let startX = 0;
-    let startY = 0;
-    if (cyRef.current) {
-      const pan = cyRef.current.pan();
-      const zoom = cyRef.current.zoom();
-      const container = cyRef.current.container();
-      if (container) {
-        const centerX = container.clientWidth / 2;
-        const centerY = container.clientHeight / 2;
-        startX = (centerX - pan.x) / zoom;
-        startY = (centerY - pan.y) / zoom;
+    // 🔥 중복 실행 방지: 로컬스토리지에서 즉시 제거
+    clearPendingImportKeywords();
+
+    // 백엔드에 직접 순차적으로 노드 생성
+    const addNodesSequentially = async () => {
+      // 백엔드에서 최신 노드 목록 먼저 조회
+      const existingNodesFromBackend = await fetchMindmapNodes(workspaceId);
+
+      // 백엔드 자동 생성 기본 루트 노드(nodeId === 1) 제외
+      const existingNodes = existingNodesFromBackend.filter(node => {
+        return !(node.nodeId === 1 && existingNodesFromBackend.length === 1);
+      });
+
+      // 키워드를 노드로 변환
+      // 기존 노드가 있으면 오른쪽에 배치, 없으면 중앙(2500, 2500)에 배치
+      const newNodes = convertTrendKeywordsToNodes(
+        pendingKeywords,
+        getRandomThemeColor,
+        existingNodes // 기존 노드 정보 전달하여 겹치지 않게 배치
+      );
+
+      let lastCreatedNodeId: number | null = null;
+      let firstCreatedNodeId: number | null = null; // 🔥 첫 번째 노드 ID 저장
+
+      for (let i = 0; i < newNodes.length; i++) {
+        const node = newNodes[i];
+
+        // parentId 결정: 첫 노드는 null, 이후는 이전 노드의 nodeId
+        const backendParentId = i === 0 ? null : lastCreatedNodeId;
+
+        try{
+          // 백엔드에 직접 생성 요청
+          const createdNode = await createMindmapNode(workspaceId, {
+            parentId: backendParentId,
+            type: node.type || "text",
+            keyword: node.keyword,
+            memo: node.memo,
+            x: node.x ?? 0,
+            y: node.y ?? 0,
+            color: node.color,
+          });
+
+          // 생성된 nodeId를 다음 노드의 parentId로 사용
+          lastCreatedNodeId = createdNode.nodeId as number;
+
+          // 🔥 첫 번째 노드의 ID를 저장 (카메라 포커스용)
+          if (i === 0) {
+            firstCreatedNodeId = createdNode.nodeId as number;
+          }
+
+        } catch (error) {
+          console.error(`[MindmapPage] ❌ Failed to create node:`, error);
+          // 실패 시 중단
+          break;
+        }
       }
+
+      // 백엔드에서 모든 노드 다시 조회
+      const allNodes = await fetchMindmapNodes(workspaceId);
+
+      // Yjs Map에 노드들 반영 (remote origin으로 설정하여 useMindmapSync 트리거 방지)
+      if (collab?.map) {
+        // crud.transact가 아니라 Y.Doc의 transact를 직접 사용 (origin 제어)
+        collab.map.doc?.transact(() => {
+          // 기존 노드 모두 제거
+          collab.map.clear();
+
+          // 백엔드에서 조회한 노드들로 다시 채우기
+          for (const node of allNodes) {
+            collab.map.set(node.id, node);
+          }
+        }, "remote");
+      }
+
+      // 🔥 백엔드에서 조회한 노드 중 첫 번째로 생성된 노드 ID로 찾기 (키워드 중복 방지)
+      if (firstCreatedNodeId) {
+        const matchedNode = allNodes.find(node => node.nodeId === firstCreatedNodeId);
+        if (matchedNode) {
+          setFocusNodeId(matchedNode.id);
+        }
+      }
+    };
+
+    addNodesSequentially()
+      .then(() => {
+        // 임포트 완료
+      })
+      .catch((error) => {
+        console.error("[MindmapPage] ❌ 트렌드 키워드 임포트 실패:", error);
+      });
+  }, [collab, crud, isBootstrapping, workspaceId, getRandomThemeColor]);
+
+  // 🔥 포커스 노드로 카메라 이동 (cyRef를 통해 focusOnNode 호출)
+  useEffect(() => {
+    if (!focusNodeId) {
+      return;
     }
 
-    // 키워드를 노드로 변환
-    const newNodes = convertTrendKeywordsToNodes(
-      pendingKeywords,
-      getRandomThemeColor,
-      startX,
-      startY
-    );
+    // nodes에서 해당 노드 찾기 (노드가 실제로 존재하는지 확인)
+    const targetNode = nodes.find(n => n.id === focusNodeId);
 
-    // Y.Map에 노드 추가 (transaction으로 한 번에)
-    crud.transact((map) => {
-      for (const node of newNodes) {
-        map.set(node.id, node);
-      }
-    });
+    if (targetNode && targetNode.x !== undefined && targetNode.y !== undefined) {
+      // cyRef의 focusOnNode 메서드 사용
+      const timer = setTimeout(() => {
+        if (cyRef.current && typeof (cyRef.current as any).focusOnNode === 'function') {
+          (cyRef.current as any).focusOnNode(focusNodeId);
+        }
 
-    // 로컬스토리지에서 제거
-    clearPendingImportKeywords();
-  }, [collab, crud, isBootstrapping, getRandomThemeColor]);
+        setFocusNodeId(null);
+      }, 200); // DOM 렌더링 대기
+
+      return () => clearTimeout(timer);
+    }
+  }, [focusNodeId, nodes]);
 
   // 🔄 Track D3 transform updates and container size
   useEffect(() => {
@@ -415,6 +644,8 @@ const MindmapPageContent: React.FC = () => {
             mode={mode}
             analyzeSelection={analyzeMode.analyzeSelection}
             selectedNodeId={selectedNodeId}
+            aiRecommendationsMap={aiRecommendationsMap}
+            workspaceId={workspaceId}
             isReadOnly={!canEdit}
             onNodeSelect={setSelectedNodeId}
             onNodeUnselect={() => setSelectedNodeId(null)}

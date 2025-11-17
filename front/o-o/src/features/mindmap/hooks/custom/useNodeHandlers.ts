@@ -3,8 +3,10 @@ import type {
   ChildNodeRequest,
   DeleteNodePayload,
   EditNodePayload,
+  NodeData,
 } from "../../types";
 import type { FocusedButton } from './useNodeFocus';
+import { requestNodeAnalysis } from "@/services/mindmapService";
 
 type UseNodeHandlersParams = {
   id: string;
@@ -12,6 +14,9 @@ type UseNodeHandlersParams = {
   y: number;
   initialColor: string;
   isSelected: boolean;
+  nodeId?: number; // Backend node ID
+  workspaceId?: string;
+  allNodes?: NodeData[]; // All nodes for finding ancestors
   onSelect: () => void;
   onDeselect: () => void;
   setFocusedButton: (button: FocusedButton) => void;
@@ -34,6 +39,9 @@ export const useNodeHandlers = ({
   y,
   initialColor,
   isSelected,
+  nodeId,
+  workspaceId,
+  allNodes,
   onSelect,
   onDeselect,
   setFocusedButton,
@@ -137,9 +145,55 @@ export const useNodeHandlers = ({
     setFocusedButton(null);
   }, [closePalette, setFocusedButton]);
 
-  const handleRecommend = useCallback(() => {
+  const handleRecommend = useCallback(async () => {
+    // AI 추천 요청
+    if (nodeId && workspaceId && allNodes) {
+      try {
+        // 현재 노드부터 루트까지의 조상 경로 찾기
+        const ancestorPath: Array<{ nodeId: number; parentId: number | null; keyword: string; memo: string }> = [];
+
+        // 현재 노드 찾기
+        const currentNode = allNodes.find(n => n.id === id);
+        if (!currentNode || !currentNode.nodeId) {
+          console.warn("[handleRecommend] Current node not found or missing nodeId");
+          setFocusedButton('recommend');
+          return;
+        }
+
+        // 조상 경로 구축 (현재 노드 -> 루트)
+        let node: NodeData | undefined = currentNode;
+        while (node) {
+          ancestorPath.push({
+            nodeId: node.nodeId as number,
+            parentId: typeof node.parentId === 'number' ? node.parentId : null,
+            keyword: node.keyword,
+            memo: node.memo || "",
+          });
+
+          // 부모 노드 찾기
+          if (!node.parentId) break;
+
+          const parentIdNum = typeof node.parentId === 'number'
+            ? node.parentId
+            : Number(node.parentId);
+
+          node = allNodes.find(n => n.nodeId === parentIdNum);
+        }
+
+        console.log("[handleRecommend] Requesting AI analysis with ancestor path:", ancestorPath);
+
+        // AI 분석 요청
+        await requestNodeAnalysis(workspaceId, nodeId, ancestorPath);
+
+        console.log("[handleRecommend] ✅ AI analysis request sent successfully");
+      } catch (error) {
+        console.error("[handleRecommend] Failed to request AI analysis:", error);
+      }
+    }
+
+    // UI 열기
     setFocusedButton('recommend');
-  }, [setFocusedButton]);
+  }, [setFocusedButton, nodeId, workspaceId, allNodes, id]);
 
   const handleRecommendSelect = useCallback(
     (recommendText: string) => {

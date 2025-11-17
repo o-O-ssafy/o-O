@@ -3,6 +3,7 @@ import { useAppDispatch, useAppSelector } from "@/store/hooks"; // Redux 타입 
 import {
   fetchWorkspaces,
   loadMoreWorkspaces,
+  removeWorkspace,
 } from "@/store/slices/mypageSlice";
 import type {
   ActiveDaysQueryParams,
@@ -25,6 +26,7 @@ interface UseMypageReturn {
   error: string | null;
   fetchWorkspacesList: (params?: WorkspaceQueryParams) => void;
   loadMore: () => void;
+  deleteWorkspace: (workspaceId: number) => void;
 
   // 달력 활성 날짜 관련
   activeDates: string[];
@@ -73,12 +75,7 @@ export const useMypage = (): UseMypageReturn => {
   // 월별 활성 날짜 조회
   const fetchActiveDaysList = useCallback(
     (params: ActiveDaysQueryParams = DEFAULT_MONTH_PARAMS) => {
-      console.log("🔥 fetchActiveDaysList 호출됨, params:", params);
-      console.log("🔥 DEFAULT_MONTH_PARAMS:", DEFAULT_MONTH_PARAMS);
-
       const action = dispatch(fetchActiveDays(params));
-      console.log("🔥 dispatch 완료, action:", action);
-
       return action;
     },
     [dispatch]
@@ -92,6 +89,14 @@ export const useMypage = (): UseMypageReturn => {
     [dispatch]
   );
 
+  // 워크스페이스 삭제 (로컬 상태에서만 제거)
+  const deleteWorkspace = useCallback(
+    (workspaceId: number) => {
+      dispatch(removeWorkspace(workspaceId));
+    },
+    [dispatch]
+  );
+
   return {
     // 워크스페이스
     workspaces,
@@ -101,6 +106,7 @@ export const useMypage = (): UseMypageReturn => {
     error,
     fetchWorkspacesList,
     loadMore,
+    deleteWorkspace,
 
     // 활성 날짜
     activeDates: activeDays?.dates || [],

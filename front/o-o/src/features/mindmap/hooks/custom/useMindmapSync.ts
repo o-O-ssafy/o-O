@@ -67,7 +67,9 @@ export function useMindmapSync(
   enabled: boolean = true
 ) {
   const syncInProgressRef = useRef<Set<string>>(new Set());
-  const updateTimeoutsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const updateTimeoutsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(
+    new Map()
+  );
 
   useEffect(() => {
     if (!yMap || !enabled) return;
@@ -109,8 +111,80 @@ export function useMindmapSync(
             return;
           }
 
+          // parentId 변환: 문자열 ID인 경우 해당 노드의 nodeId를 찾아서 사용
+          let backendParentId: number | null = null;
+          if (nodeData.parentId) {
+            // parentId가 숫자면 그대로 사용 (이미 백엔드 nodeId)
+            if (typeof nodeData.parentId === "number") {
+              backendParentId = nodeData.parentId;
+            } else {
+              // parentId가 문자열이면 Y.Map에서 해당 노드를 찾아 nodeId 사용
+              const parentNode = yMap.get(nodeData.parentId as string);
+              if (parentNode?.nodeId) {
+                backendParentId = parentNode.nodeId as number;
+              } else {
+                // 부모가 아직 백엔드에 동기화되지 않은 경우, 재시도 로직
+
+                // 재시도 함수 정의
+                const retryCreateNode = (attempt: number = 0) => {
+                  if (attempt >= 10) {
+                    syncInProgressRef.current.delete(key);
+                    return;
+                  }
+
+                  setTimeout(() => {
+                    const retryParentNode = yMap.get(
+                      nodeData.parentId as string
+                    );
+                    if (retryParentNode?.nodeId) {
+                      // 부모 nodeId를 찾았으면 직접 백엔드 API 호출
+                      const backendParentId = retryParentNode.nodeId as number;
+
+                      createMindmapNode(workspaceId, {
+                        parentId: backendParentId,
+                        type: nodeData.type || "text",
+                        keyword: nodeData.keyword,
+                        memo: nodeData.memo,
+                        x: nodeData.x,
+                        y: nodeData.y,
+                        color: nodeData.color,
+                      })
+                        .then((createdNode) => {
+                          // 백엔드에서 받은 nodeId를 로컬 노드에 반영
+                          yMap.doc?.transact(() => {
+                            const current = yMap.get(key);
+                            if (current && createdNode.nodeId) {
+                              yMap.set(key, {
+                                ...current,
+                                nodeId: createdNode.nodeId,
+                              });
+                            }
+                          }, "remote");
+                        })
+                        .catch((error) => {
+                          console.error(
+                            "[useMindmapSync] Retry - failed to create node:",
+                            error
+                          );
+                        })
+                        .finally(() => {
+                          syncInProgressRef.current.delete(key);
+                        });
+                    } else {
+                      // 아직 부모가 동기화되지 않았으면 다시 재시도
+                      retryCreateNode(attempt + 1);
+                    }
+                  }, 300);
+                };
+
+                retryCreateNode(0);
+                return;
+              }
+            }
+          }
+
           createMindmapNode(workspaceId, {
-            parentId: nodeData.parentId ? Number(nodeData.parentId) : null,
+            parentId: backendParentId,
             type: nodeData.type || "text",
             keyword: nodeData.keyword,
             memo: nodeData.memo,
@@ -171,13 +245,31 @@ export function useMindmapSync(
               return;
             }
 
+            // parentId 변환: 문자열 ID인 경우 해당 노드의 nodeId를 찾아서 사용
+            let backendParentId: number | null = null;
+            if (latestNodeData.parentId) {
+              // parentId가 숫자면 그대로 사용 (이미 백엔드 nodeId)
+              if (typeof latestNodeData.parentId === "number") {
+                backendParentId = latestNodeData.parentId;
+              } else {
+                // parentId가 문자열이면 Y.Map에서 해당 노드를 찾아 nodeId 사용
+                const parentNode = yMap.get(latestNodeData.parentId as string);
+                if (parentNode?.nodeId) {
+                  backendParentId = parentNode.nodeId as number;
+                } else {
+                  // 부모를 찾을 수 없으면 null로 설정 (루트로 변경)
+                  backendParentId = null;
+                }
+              }
+            }
+
             updateMindmapNode(workspaceId, latestNodeData.nodeId as number, {
               keyword: latestNodeData.keyword,
               memo: latestNodeData.memo,
               x: latestNodeData.x,
               y: latestNodeData.y,
               color: latestNodeData.color,
-              parentId: latestNodeData.parentId ? Number(latestNodeData.parentId) : null,
+              parentId: backendParentId,
               type: latestNodeData.type,
               analysisStatus: latestNodeData.analysisStatus,
             })
@@ -204,7 +296,7 @@ export function useMindmapSync(
 
           deleteMindmapNode(workspaceId, oldNodeData.nodeId)
             .then(() => {
-              // Success
+              // Node deleted
             })
             .catch((error) => {
               // Silently fail

@@ -15,21 +15,10 @@ export default function RecommendNodeOverlay({
   onSelectRecommendation,
   selectedNodeX,
   selectedNodeY,
+  trendRecommendations = [],
+  aiRecommendations = [],
 }: RecommendNodeOverlayProps) {
   if (!open) return null;
-
-  // Dummy 추천 노드 데이터
-  const aiRecommendations: RecommendNodeData[] = [
-    { id: "ai-1", keyword: "AI 추천 아이디어 1", type: "ai" },
-    { id: "ai-2", keyword: "AI 추천 아이디어 2", type: "ai" },
-    { id: "ai-3", keyword: "AI 추천 아이디어 3", type: "ai" },
-  ];
-
-  const trendRecommendations: RecommendNodeData[] = [
-    { id: "trend-1", keyword: "트렌드 아이디어 1", type: "trend" },
-    { id: "trend-2", keyword: "트렌드 아이디어 2", type: "trend" },
-    { id: "trend-3", keyword: "트렌드 아이디어 3", type: "trend" },
-  ];
 
   // 각도와 반지름으로 위치 계산
   const getPosition = (angle: number, r: number = RECOMMENDATION_LAYOUT_CONFIG.radius) => {
@@ -123,8 +112,8 @@ export default function RecommendNodeOverlay({
           renderRecommendNode(node, RECOMMENDATION_THEME.ai.angles[index + 1], index)
         )}
 
-        {/* Trend 아이콘 */}
-        {renderIconButton("trend", RECOMMENDATION_THEME.trend.angles[0])}
+        {/* Trend 아이콘 - 추천이 있을 때만 표시 */}
+        {trendRecommendations.length > 0 && renderIconButton("trend", RECOMMENDATION_THEME.trend.angles[0])}
 
         {/* Trend 추천 노드들 */}
         {trendRecommendations.map((node, index) =>
