@@ -1,14 +1,6 @@
 // hooks/custom/useMediaUpload.ts
 import { useState } from "react";
-
-type MediaType = "image" | "youtube" | null;
-
-interface MediaData {
-  type: MediaType;
-  imageUrl?: string;
-  imageFile?: File;
-  youtubeUrl?: string;
-}
+import type { MediaData } from "../../types";
 
 export function useMediaUpload() {
   const [mediaData, setMediaData] = useState<MediaData>({ type: null });

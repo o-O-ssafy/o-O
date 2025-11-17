@@ -43,6 +43,22 @@ export interface UpdateMindmapNodeRequest {
   analysisStatus?: NodeAnalysisStatus | null;
 }
 
+// Initial Mindmap Creation
+export interface InitialMindmapRequestDTO {
+  contentUrl: string | null;
+  contentType: "TEXT" | "VIDEO" | "IMAGE";
+  startPrompt: string | null;
+}
+
+export interface InitialMindmapResponseDTO {
+  workspaceId: number;
+  nodeId: number;
+  keyword: string;
+  memo: string;
+  analysisStatus: NodeAnalysisStatus;
+  message: string;
+}
+
 // Normalizes REST DTOs into the NodeData shape consumed by Yjs/React state
 
 export type NodeDTO = {

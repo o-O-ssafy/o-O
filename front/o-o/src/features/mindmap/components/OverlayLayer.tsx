@@ -1,7 +1,7 @@
 /**
  * OverlayLayer
- * - HTML overlay ?? UI ??
- * - Cytoscape ??? ?? React ???? ??
+ * - HTML overlay for Mindmap nodes
+ * - Cytoscape overlay synchronization with React
  */
 import type { Core } from "cytoscape";
 import NodeOverlay from "./overlays/NodeOverlay";

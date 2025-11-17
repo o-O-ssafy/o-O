@@ -43,8 +43,8 @@ export default function CytoscapeCanvas({
 }: CytoscapeCanvasProps) {
 
   const cyRef = useRef<Core | null>(null);
-  const [cyReady, setCyReady] = useState(false);       // cy ?? ??
-  const [, forceOverlayUpdate] = useReducer((value: number) => value + 1, 0);   // pan/zoom ? ???? ?? ???
+  const [cyReady, setCyReady] = useState(false);       // cy 
+  const [, forceOverlayUpdate] = useReducer((value: number) => value + 1, 0);   // pan/zoom 
   const initializingRef = useRef(false);              // 초기화 진행 중 플래그
   const hasInitialFocusedRef = useRef(false);         // 초기 포커스 완료 플래그
 

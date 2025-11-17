@@ -1,6 +1,9 @@
 // yjsClient.ts
 import * as Y from "yjs";
 import { WebsocketProvider } from "y-websocket";
+import type { WorkspaceNotification } from "../../types/websocket.types";
+
+export type CustomMessageHandler = (message: WorkspaceNotification) => void;
 
 export type YClient = {
   doc: Y.Doc;
@@ -11,6 +14,8 @@ export type YClient = {
   connect: () => void;
   disconnect: () => void;
   destroy: () => void;
+  /** 커스텀 메시지 리스너 등록 (role-update 등) */
+  onCustomMessage: (handler: CustomMessageHandler) => () => void;
 };
 
 /**
@@ -101,6 +106,65 @@ export const createYClient = (
     doc.destroy();
   };
 
+  /**
+   * 커스텀 메시지 리스너 등록
+   * WebSocket의 raw message 이벤트를 활용하여 서버에서 보낸 커스텀 메시지 수신
+   *
+   * @param handler - 메시지를 처리할 콜백 함수
+   * @returns cleanup 함수 (리스너 제거용)
+   */
+  const onCustomMessage = (handler: CustomMessageHandler): (() => void) => {
+    const messageHandler = (event: MessageEvent) => {
+      try {
+        // WebSocket 메시지 데이터 처리
+        let text: string;
+
+        if (typeof event.data === "string") {
+          text = event.data;
+        } else if (event.data instanceof ArrayBuffer) {
+          text = new TextDecoder().decode(event.data);
+        } else if (event.data instanceof Blob) {
+          // Blob은 비동기 처리가 필요하지만, y-websocket은 주로 ArrayBuffer 사용
+          return;
+        } else {
+          return;
+        }
+
+        // JSON 파싱 시도 (커스텀 메시지는 JSON 형태로 가정)
+        try {
+          const message = JSON.parse(text) as unknown;
+
+          // 디버깅: 모든 JSON 메시지 로깅
+          console.log("[yjsClient] Raw WebSocket message:", message);
+
+          // WorkspaceNotification 타입 체크는 handler 내부에서 수행
+          if (typeof message === "object" && message !== null && "type" in message) {
+            handler(message as WorkspaceNotification);
+          }
+        } catch {
+          // JSON이 아닌 데이터는 무시 (Yjs sync 바이너리 메시지)
+        }
+      } catch (error) {
+        console.error("[yjsClient] Failed to process custom message:", error);
+      }
+    };
+
+    // WebSocket의 raw message 이벤트 리스닝
+    // provider.ws는 연결 후 생성되므로 존재 여부 확인
+    const ws = provider.ws;
+    if (ws) {
+      ws.addEventListener("message", messageHandler);
+    }
+
+    // Cleanup 함수 반환
+    return () => {
+      const ws = provider.ws;
+      if (ws) {
+        ws.removeEventListener("message", messageHandler);
+      }
+    };
+  };
+
   return {
     doc,
     provider,
@@ -109,5 +173,6 @@ export const createYClient = (
     connect,
     disconnect,
     destroy,
+    onCustomMessage,
   };
 };

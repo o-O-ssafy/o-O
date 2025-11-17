@@ -1,5 +1,5 @@
 import type { NodeData } from "@/features/mindmap/types";
-import { mapDtoToNodeData, type NodeDTO } from "./dto/mindmap.dto";
+import { mapDtoToNodeData, type NodeDTO, type InitialMindmapRequestDTO, type InitialMindmapResponseDTO } from "./dto/mindmap.dto";
 import { apiClient } from "@/lib/axios";
 
 // Loads the initial node list so we can seed the collaborative Y.Map
@@ -74,4 +74,40 @@ export const batchUpdateNodePositions = async (
       })
     )
   );
+};
+
+// Creates initial mindmap with content (text/video)
+export const createInitialMindmap = async (
+  request: InitialMindmapRequestDTO
+): Promise<InitialMindmapResponseDTO> => {
+  const { data } = await apiClient.post<InitialMindmapResponseDTO>(
+    "/mindmap/initial",
+    request
+  );
+  return data;
+};
+
+// Creates initial mindmap from image file
+export const createInitialMindmapFromImage = async (
+  file: File,
+  startPrompt: string | null
+): Promise<InitialMindmapResponseDTO> => {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const params = new URLSearchParams();
+  if (startPrompt) {
+    params.append("startPrompt", startPrompt);
+  }
+
+  const { data } = await apiClient.post<InitialMindmapResponseDTO>(
+    `/mindmap/initial/image?${params.toString()}`,
+    formData,
+    {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    }
+  );
+  return data;
 };

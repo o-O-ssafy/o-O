@@ -7,6 +7,12 @@ import LoginPromptModel from "@/shared/ui/LoginPromptModal";
 import popo from "@/shared/assets/images/popo_chu.webp";
 import { useAppSelector } from "@/store/hooks";
 import type { TrendKeywordItem } from "@/features/trend/types/trend";
+import { useMediaUpload } from "../hooks/custom/useMediaUpload";
+import {
+  useCreateInitialMindmapMutation,
+  useCreateInitialMindmapFromImageMutation,
+} from "@/features/mindmap/hooks/mutation/useCreateInitialMindmapMutation";
+import type { InitialMindmapRequestDTO } from "@/services/dto/mindmap.dto";
 
 interface SearchSectionProps {
   readonly keywords?: TrendKeywordItem[];
@@ -25,6 +31,20 @@ export function SearchSection({
   const navigate = useNavigate();
 
   const isLoggedIn = useAppSelector((state) => state.auth.isLoggedIn);
+
+  const {
+    mediaData,
+    isDragging,
+    handlePaste,
+    handleDragOver,
+    handleDragLeave,
+    handleDrop,
+    clearMedia,
+  } = useMediaUpload();
+
+  const { mutateAsync: createInitialMindmap, isPending } = useCreateInitialMindmapMutation();
+  const { mutateAsync: createInitialMindmapFromImage, isPending: isImagePending } =
+    useCreateInitialMindmapFromImageMutation();
 
   useEffect(() => {
     if (isLoginModalOpen && globalThis.google?.accounts?.id) {
@@ -47,11 +67,36 @@ export function SearchSection({
     }
   };
 
-  const handleCreateClick = () => {
-    if (isLoggedIn) {
-      navigate("/new-project");
-    } else {
+  const handleCreateClick = async () => {
+    if (!isLoggedIn) {
       setIsLoginModalOpen(true);
+      return;
+    }
+
+    try {
+      let response;
+
+      // 이미지 파일이 있는 경우
+      if (mediaData.type === "image" && mediaData.imageFile) {
+        response = await createInitialMindmapFromImage({
+          file: mediaData.imageFile,
+          startPrompt: searchValue || null,
+        });
+      } else {
+        // 텍스트 또는 비디오 URL인 경우
+        const request: InitialMindmapRequestDTO = {
+          contentUrl: mediaData.type === "youtube" ? mediaData.youtubeUrl ?? null : null,
+          contentType: mediaData.type === "youtube" ? "VIDEO" : "TEXT",
+          startPrompt: searchValue || null,
+        };
+        response = await createInitialMindmap(request);
+      }
+
+      // 성공 시 마인드맵 페이지로 이동
+      navigate(`/mindmap/${response.workspaceId}`);
+    } catch (error) {
+      console.error("마인드맵 생성 실패:", error);
+      // TODO: 에러 처리 (토스트 메시지 등)
     }
   };
 
@@ -67,7 +112,17 @@ export function SearchSection({
         "
       >
         <div className="w-full flex flex-col justify-center items-center gap-8">
-          <SearchInput value={searchValue} onChange={handleInputChange} />
+          <SearchInput
+            value={searchValue}
+            onChange={handleInputChange}
+            mediaData={mediaData}
+            isDragging={isDragging}
+            handlePaste={handlePaste}
+            handleDragOver={handleDragOver}
+            handleDragLeave={handleDragLeave}
+            handleDrop={handleDrop}
+            clearMedia={clearMedia}
+          />
           <SearchRecommendSection
             keywords={keywords}
             keywordsError={keywordsError}
@@ -76,8 +131,13 @@ export function SearchSection({
             selectedKeyword={selectedKeyword}
           />
         </div>
-        <Button onClick={handleCreateClick} variant="primary" size="responsive">
-          생성하기
+        <Button
+          onClick={handleCreateClick}
+          variant="primary"
+          size="responsive"
+          disabled={isPending || isImagePending}
+        >
+          {isPending || isImagePending ? "마인드맵을 생성 중입니다..." : "생성하기"}
         </Button>
       </div>
 

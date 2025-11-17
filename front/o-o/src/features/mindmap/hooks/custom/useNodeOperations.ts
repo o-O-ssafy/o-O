@@ -2,6 +2,9 @@ import { useCallback, type RefObject } from "react";
 import type { Core } from "cytoscape";
 import type { YMapCrud } from "../../../workspace/hooks/custom/yMapCrud";
 import type { NodeData, MindmapMode, DeleteNodePayload, EditNodePayload } from "../../types";
+import type { WorkspaceRole } from "@/services/dto/workspace.dto";
+import { canEditWorkspace } from "@/shared/utils/permissionUtils";
+import { useToast } from "@/shared/ui/ToastProvider";
 
 /**
  * 노드 CRUD 작업 핸들러를 제공하는 커스텀 훅
@@ -17,10 +20,15 @@ import type { NodeData, MindmapMode, DeleteNodePayload, EditNodePayload } from "
  * - 새 노드 추가 시 viewport 중심을 model coordinates로 변환
  * - 겹침 방지를 위해 `findNonOverlappingPosition` 사용
  *
+ * **권한 체크:**
+ * - 모든 CRUD 작업 전 canEditWorkspace(myRole) 체크
+ * - 권한 없으면 토스트 메시지 표시 후 중단
+ *
  * @param params.crud - Y.Map CRUD 작업 래퍼
  * @param params.nodes - 현재 노드 배열
  * @param params.cyRef - Cytoscape 인스턴스 참조
  * @param params.mode - 현재 마인드맵 모드 (edit/analyze)
+ * @param params.myRole - 현재 사용자의 워크스페이스 역할
  * @param params.getRandomThemeColor - 랜덤 테마 색상 생성 함수
  * @param params.findNonOverlappingPosition - 겹치지 않는 위치 찾기 함수
  * @returns 모든 노드 작업 핸들러 함수들
@@ -31,11 +39,13 @@ export function useNodeOperations(params: {
   cyRef: RefObject<Core | null>;
   mode: MindmapMode;
   workspaceId: string;
+  myRole: WorkspaceRole | undefined;
   getRandomThemeColor: () => string;
   findNonOverlappingPosition: (nodes: NodeData[], baseX: number, baseY: number) => { x: number; y: number };
   findEmptySpace: (nodes: NodeData[], preferredX: number, preferredY: number, minDistance?: number) => { x: number; y: number };
 }) {
-  const { crud, nodes, cyRef, mode, workspaceId, getRandomThemeColor, findNonOverlappingPosition, findEmptySpace } = params;
+  const { crud, nodes, cyRef, mode, workspaceId, myRole, getRandomThemeColor, findNonOverlappingPosition, findEmptySpace } = params;
+  const { showToast } = useToast();
 
   /**
    * 텍스트박스에서 새 노드 추가
@@ -43,6 +53,11 @@ export function useNodeOperations(params: {
    */
   const handleAddNode = useCallback((text: string) => {
     if (mode === "analyze" || !crud) return;
+
+    if (!canEditWorkspace(myRole)) {
+      showToast("노드를 추가할 권한이 없습니다", "error");
+      return;
+    }
     const randomColor = getRandomThemeColor();
 
     let baseX = 0;
@@ -80,7 +95,7 @@ export function useNodeOperations(params: {
       operation: 'ADD',
     };
     crud.set(newNode.id, newNode);
-  }, [crud, findNonOverlappingPosition, getRandomThemeColor, mode, nodes, cyRef, workspaceId]);
+  }, [crud, findNonOverlappingPosition, getRandomThemeColor, mode, nodes, cyRef, workspaceId, myRole, showToast]);
 
   /**
    * 자식 노드 생성
@@ -101,6 +116,11 @@ export function useNodeOperations(params: {
     memo?: string;
   }) => {
     if (!crud || !keyword) return;
+
+    if (!canEditWorkspace(myRole)) {
+      showToast("노드를 추가할 권한이 없습니다", "error");
+      return;
+    }
 
     // 부모 노드 찾기 (nodeId를 가져오기 위해)
     const parentNode = nodes.find(n => n.id === parentId);
@@ -138,7 +158,7 @@ export function useNodeOperations(params: {
     });
 
     crud.set(newNode.id, newNode);
-  }, [crud, findEmptySpace, getRandomThemeColor, nodes, workspaceId]);
+  }, [crud, findEmptySpace, getRandomThemeColor, nodes, workspaceId, myRole, showToast]);
 
   /**
    * 노드 삭제
@@ -147,6 +167,11 @@ export function useNodeOperations(params: {
    */
   const handleDeleteNode = useCallback(({ nodeId, deleteDescendants }: DeleteNodePayload) => {
     if (!crud) return;
+
+    if (!canEditWorkspace(myRole)) {
+      showToast("노드를 삭제할 권한이 없습니다", "error");
+      return;
+    }
 
     const idsToDelete = new Set<string>([nodeId]);
 
@@ -184,7 +209,7 @@ export function useNodeOperations(params: {
         map.delete(id);
       });
     });
-  }, [crud, nodes]);
+  }, [crud, nodes, myRole, showToast]);
 
   /**
    * 노드 수정
@@ -192,6 +217,11 @@ export function useNodeOperations(params: {
    */
   const handleEditNode = useCallback(({ nodeId, newText, newMemo, newColor, newParentId, x, y }: EditNodePayload & { x?: number; y?: number }) => {
     if (!crud) return;
+
+    if (!canEditWorkspace(myRole)) {
+      showToast("노드를 수정할 권한이 없습니다", "error");
+      return;
+    }
     crud.update(nodeId, (current) => {
       if (!current) return current;
       return {
@@ -205,7 +235,7 @@ export function useNodeOperations(params: {
         operation: 'UPDATE',
       };
     });
-  }, [crud]);
+  }, [crud, myRole, showToast]);
 
   /**
    * 다수 노드 위치 일괄 변경
@@ -213,6 +243,11 @@ export function useNodeOperations(params: {
    */
   const handleBatchNodePositionChange = useCallback((positions: Array<{ id: string; x: number; y: number }>) => {
     if (!crud || positions.length === 0) return;
+
+    if (!canEditWorkspace(myRole)) {
+      showToast("노드를 이동할 권한이 없습니다", "error");
+      return;
+    }
     const positionMap = new Map(positions.map((pos) => [pos.id, pos]));
 
     crud.transact((map) => {
@@ -222,7 +257,7 @@ export function useNodeOperations(params: {
         map.set(id, { ...current, x, y, operation: 'UPDATE' });
       });
     });
-  }, [crud]);
+  }, [crud, myRole, showToast]);
 
   /**
    * 테마 색상 일괄 적용
@@ -230,6 +265,11 @@ export function useNodeOperations(params: {
    */
   const handleApplyTheme = useCallback((colors: string[]) => {
     if (!crud || colors.length === 0) return;
+
+    if (!canEditWorkspace(myRole)) {
+      showToast("테마를 적용할 권한이 없습니다", "error");
+      return;
+    }
     const entries = nodes.map((node, index) => [
       node.id,
       {
@@ -239,7 +279,7 @@ export function useNodeOperations(params: {
       },
     ]) as Array<[string, NodeData]>;
     crud.setMany(entries);
-  }, [crud, nodes]);
+  }, [crud, nodes, myRole, showToast]);
 
   return {
     handleAddNode,

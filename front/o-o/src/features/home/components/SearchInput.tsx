@@ -1,23 +1,31 @@
 // SearchInput.tsx
-import { useMediaUpload } from "../hooks/custom/useMediaUpload";
+import type { MediaData } from "../types";
 import youtube from "@/shared/assets/images/youtube.webp";
 import { MediaPreview } from "./MediaPreviewProps";
 
 interface SearchInputProps {
   readonly value: string;
   readonly onChange: (value: string) => void;
+  readonly mediaData: MediaData;
+  readonly isDragging: boolean;
+  readonly handlePaste: (e: React.ClipboardEvent<HTMLInputElement>) => void;
+  readonly handleDragOver: (e: React.DragEvent<HTMLDivElement>) => void;
+  readonly handleDragLeave: (e: React.DragEvent<HTMLDivElement>) => void;
+  readonly handleDrop: (e: React.DragEvent<HTMLDivElement>) => void;
+  readonly clearMedia: () => void;
 }
 
-export function SearchInput({ value, onChange }: SearchInputProps) {
-  const {
-    mediaData,
-    isDragging,
-    handlePaste,
-    handleDragOver,
-    handleDragLeave,
-    handleDrop,
-    clearMedia,
-  } = useMediaUpload();
+export function SearchInput({
+  value,
+  onChange,
+  mediaData,
+  isDragging,
+  handlePaste,
+  handleDragOver,
+  handleDragLeave,
+  handleDrop,
+  clearMedia,
+}: SearchInputProps) {
 
   return (
     <section
