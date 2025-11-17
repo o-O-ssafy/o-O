@@ -4,6 +4,10 @@ import {
   type NodeDTO,
   type InitialMindmapRequestDTO,
   type InitialMindmapResponseDTO,
+  type CreateImageNodeRequest,
+  type AnalyzeNodesRequestDTO,
+  type AnalyzeNodesResponseDTO,
+  type CreatePlanResponseDTO,
 } from "./dto/mindmap.dto";
 import { apiClient } from "@/lib/axios";
 
@@ -57,11 +61,53 @@ export const createMindmapNode = async (
     x: number;
     y: number;
     color?: string;
+    contentUrl?: string | null;
   }
 ): Promise<NodeData> => {
   const { data } = await apiClient.post<NodeDTO>(
     `/mindmap/${workspaceId}/node`,
     request
+  );
+  return mapDtoToNodeData(data);
+};
+
+// Creates a new mindmap node from image file
+export const createMindmapNodeFromImage = async (
+  workspaceId: string,
+  request: Omit<CreateImageNodeRequest, 'file'> & { file: File }
+): Promise<NodeData> => {
+  const formData = new FormData();
+  formData.append("file", request.file);
+
+  // Build the request JSON object
+  const requestBody: Record<string, unknown> = {
+    x: request.x,
+    y: request.y,
+  };
+
+  if (request.parentId !== undefined && request.parentId !== null) {
+    requestBody.parentId = request.parentId;
+  }
+  if (request.keyword) {
+    requestBody.keyword = request.keyword;
+  }
+  if (request.memo) {
+    requestBody.memo = request.memo;
+  }
+  if (request.color) {
+    requestBody.color = request.color;
+  }
+
+  formData.append("request", JSON.stringify(requestBody));
+
+  const { data } = await apiClient.post<NodeDTO>(
+    `/mindmap/${workspaceId}/node/image`,
+    formData,
+    {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    }
   );
   return mapDtoToNodeData(data);
 };
@@ -119,6 +165,40 @@ export const requestNodeAnalysis = async (
   nodeId: number
 ): Promise<void> => {
   await apiClient.post(`/mindmap/${workspaceId}/node/${nodeId}/analyze`, {});
+};
+
+// 선택된 노드들을 한 번에 분석 (Analyze 모드 전용)
+export const analyzeSelectedNodes = async (
+  workspaceId: string,
+  nodeIds: number[]
+): Promise<AnalyzeNodesResponseDTO> => {
+  const { data } = await apiClient.post<AnalyzeNodesResponseDTO>(
+    `/mindmap/${workspaceId}/ai/analyze-nodes`,
+    {
+      nodeIds,
+    } as AnalyzeNodesRequestDTO,
+    {
+      timeout: 50000  // 50초 timeout (AI 분석은 시간이 오래 걸릴 수 있음)
+    }
+  );
+  return data;
+};
+
+// 기획안 생성
+export const createPlan = async (
+  workspaceId: string,
+  analysisText: string,
+  title: string
+): Promise<CreatePlanResponseDTO> => {
+  const { data } = await apiClient.post<CreatePlanResponseDTO>(
+    `/mindmap/${workspaceId}/ai/create-plan`,
+    {
+      analysisText,
+      title,
+    },
+    { timeout: 60000 }
+  );
+  return data;
 };
 
 // Creates initial mindmap with content (text/video)

@@ -1,5 +1,6 @@
 import { useCallback, type RefObject } from "react";
 import type { Core } from "cytoscape";
+import type * as Y from "yjs";
 import type { YMapCrud } from "../../../workspace/hooks/custom/yMapCrud";
 import type {
   NodeData,
@@ -10,6 +11,7 @@ import type {
 import type { WorkspaceRole } from "@/services/dto/workspace.dto";
 import { canEditWorkspace } from "@/shared/utils/permissionUtils";
 import { useToast } from "@/shared/ui/ToastProvider";
+import { createMindmapNode, createMindmapNodeFromImage } from "@/services/mindmapService";
 import { calculateChildPosition } from "../../utils/parentCenteredLayout";
 
 /**
@@ -37,6 +39,7 @@ import { calculateChildPosition } from "../../utils/parentCenteredLayout";
  * @param params.myRole - 현재 사용자의 워크스페이스 역할
  * @param params.getRandomThemeColor - 랜덤 테마 색상 생성 함수
  * @param params.findNonOverlappingPosition - 겹치지 않는 위치 찾기 함수
+ * @param params.yMap - Y.Map 인스턴스 (doc 접근용)
  * @returns 모든 노드 작업 핸들러 함수들
  */
 export function useNodeOperations(params: {
@@ -47,92 +50,95 @@ export function useNodeOperations(params: {
   workspaceId: string;
   myRole: WorkspaceRole | undefined;
   getRandomThemeColor: () => string;
-  findNonOverlappingPosition: (
-    nodes: NodeData[],
-    baseX: number,
-    baseY: number
-  ) => { x: number; y: number };
-  findEmptySpace: (
-    nodes: NodeData[],
-    preferredX: number,
-    preferredY: number,
-    minDistance?: number
-  ) => { x: number; y: number };
+  findNonOverlappingPosition: (nodes: NodeData[], baseX: number, baseY: number) => { x: number; y: number };
+  findEmptySpace: (nodes: NodeData[], preferredX: number, preferredY: number, minDistance?: number) => { x: number; y: number };
+  yMap?: Y.Map<NodeData> | null;
 }) {
-  const {
-    crud,
-    nodes,
-    cyRef,
-    mode,
-    workspaceId,
-    myRole,
-    getRandomThemeColor,
-    findNonOverlappingPosition,
-  } = params;
+  const { crud, nodes, cyRef, mode, workspaceId, myRole, getRandomThemeColor, findNonOverlappingPosition, findEmptySpace, yMap } = params;
   const { showToast } = useToast();
 
   /**
    * 텍스트박스에서 새 노드 추가
    * - Viewport 중심에 배치 (model coordinates)
+   * - API 직접 호출 후 Y.Doc에 결과 추가
    */
-  const handleAddNode = useCallback(
-    (text: string) => {
-      if (mode === "analyze" || !crud) return;
+  const handleAddNode = useCallback(async ({ text, imageFile, youtubeUrl }: {
+    text: string;
+    imageFile?: File | null;
+    youtubeUrl?: string | null;
+  }) => {
+    if (mode === "analyze" || !crud) return;
 
-      if (!canEditWorkspace(myRole)) {
-        showToast("노드를 추가할 권한이 없습니다", "error");
-        return;
+    if (!canEditWorkspace(myRole)) {
+      showToast("노드를 추가할 권한이 없습니다", "error");
+      return;
+    }
+
+    const randomColor = getRandomThemeColor();
+
+    let baseX = 0;
+    let baseY = 0;
+
+    // Calculate viewport center in model coordinates
+    if (cyRef.current) {
+      const pan = cyRef.current.pan();
+      const zoom = cyRef.current.zoom();
+      const container = cyRef.current.container();
+
+      if (container) {
+        const centerX = container.clientWidth / 2;
+        const centerY = container.clientHeight / 2;
+
+        // Convert screen center to model coordinates
+        baseX = (centerX - pan.x) / zoom;
+        baseY = (centerY - pan.y) / zoom;
       }
-      const randomColor = getRandomThemeColor();
+    }
 
-      let baseX = 0;
-      let baseY = 0;
+    const { x, y } = findNonOverlappingPosition(nodes, baseX, baseY);
+    console.log("[Mindmap] New node base position", { x, y });
 
-      // Calculate viewport center in model coordinates
-      if (cyRef.current) {
-        const pan = cyRef.current.pan();
-        const zoom = cyRef.current.zoom();
-        const container = cyRef.current.container();
+    try {
+      let createdNode: NodeData;
 
-        if (container) {
-          const centerX = container.clientWidth / 2;
-          const centerY = container.clientHeight / 2;
-
-          // Convert screen center to model coordinates
-          baseX = (centerX - pan.x) / zoom;
-          baseY = (centerY - pan.y) / zoom;
-        }
+      // 이미지 노드 생성
+      if (imageFile) {
+        createdNode = await createMindmapNodeFromImage(workspaceId, {
+          file: imageFile,
+          keyword: text || "이미지",
+          x,
+          y,
+          color: randomColor,
+        });
+      }
+      // 텍스트/유튜브 노드 생성
+      else {
+        createdNode = await createMindmapNode(workspaceId, {
+          type: youtubeUrl ? "video" : "text",
+          keyword: text || "새 노드",
+          contentUrl: youtubeUrl || null,
+          x,
+          y,
+          color: randomColor,
+        });
       }
 
-      const { x, y } = findNonOverlappingPosition(nodes, baseX, baseY);
-      console.log("[Mindmap] New node base position", { x, y });
+      // Y.Doc에 서버 응답 추가 (origin: "remote"로 useMindmapSync 재진입 방지)
+      if (yMap?.doc) {
+        yMap.doc.transact(() => {
+          yMap.set(createdNode.id, createdNode);
+        }, "remote");
+      } else {
+        // fallback: 일반 crud.set 사용
+        crud?.set(createdNode.id, createdNode);
+      }
 
-      const newNode: NodeData = {
-        id: `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
-        parentId: null,
-        workspaceId: parseInt(workspaceId, 10),
-        type: "text",
-        analysisStatus: "NONE",
-        keyword: text,
-        x,
-        y,
-        color: randomColor,
-        operation: "ADD",
-      };
-      crud.set(newNode.id, newNode);
-    },
-    [
-      crud,
-      findNonOverlappingPosition,
-      getRandomThemeColor,
-      mode,
-      nodes,
-      cyRef,
-      workspaceId,
-      myRole,
-      showToast,
-    ]
-  );
+      showToast("노드가 생성되었습니다", "success");
+    } catch (error) {
+      console.error("[handleAddNode] Failed to create node:", error);
+      showToast("노드 생성에 실패했습니다", "error");
+    }
+  }, [crud, yMap, findNonOverlappingPosition, getRandomThemeColor, mode, nodes, cyRef, workspaceId, myRole, showToast]);
 
   /**
    * 자식 노드 생성

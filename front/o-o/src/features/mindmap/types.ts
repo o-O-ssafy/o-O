@@ -141,7 +141,11 @@ export type RecommendNodeOverlayProps = Readonly<{
 
 // Textbox.tsx
 export type TextboxProps = Readonly<{
-  onAddNode: (text: string) => void;
+  onAddNode: (params: {
+    text: string;
+    imageFile?: File | null;
+    youtubeUrl?: string | null;
+  }) => void;
   disabled?: boolean;
 }>;
 

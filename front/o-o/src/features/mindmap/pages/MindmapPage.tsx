@@ -291,6 +291,7 @@ const MindmapPageContent: React.FC = () => {
     getRandomThemeColor,
     findNonOverlappingPosition,
     findEmptySpace,
+    yMap: collab?.map ?? null,
   });
 
   // 8. Analyze mode hook
@@ -628,6 +629,7 @@ const MindmapPageContent: React.FC = () => {
           ) : (
             <AnalyzeSelectionPanel
               selectedNodes={analyzeMode.selectedAnalyzeNodes}
+              workspaceId={workspaceId}
               onAnalyze={analyzeMode.handleAnalyzeExecute}
               onClear={analyzeMode.handleAnalyzeClear}
               onRemoveNode={analyzeMode.handleAnalyzeRemoveNode}

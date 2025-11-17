@@ -32,7 +32,7 @@ export function useMediaUpload() {
     setMediaData({ type: null });
   };
 
-  const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+  const handlePaste = (e: React.ClipboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const text = e.clipboardData?.getData("text");
 
     // 유튜브 링크 확인

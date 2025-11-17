@@ -43,6 +43,33 @@ export interface UpdateMindmapNodeRequest {
   analysisStatus?: NodeAnalysisStatus | null;
 }
 
+export interface CreateImageNodeRequest {
+  file: File;
+  parentId?: number | null;
+  keyword?: string;
+  memo?: string;
+  x: number;
+  y: number;
+  color?: string;
+}
+
+export interface AnalyzeNodesRequestDTO {
+  nodeIds: number[];
+}
+
+export interface AnalyzeNodesResponseDTO {
+  analysis: string;
+}
+
+export interface CreatePlanRequestDTO {
+  analysisText: string;
+  title: string;
+}
+
+export interface CreatePlanResponseDTO {
+  plan: string;
+}
+
 // Initial Mindmap Creation
 export interface InitialMindmapRequestDTO {
   contentUrl: string | null;
