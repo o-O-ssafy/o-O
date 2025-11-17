@@ -766,6 +766,7 @@ public class NodeService {
                 .type("image")
                 .x(null)
                 .y(null)
+                .color(InitialColor.getRandomColor())
                 .analysisStatus(MindmapNode.AnalysisStatus.PENDING)
                 .build();
 
