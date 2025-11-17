@@ -5,6 +5,7 @@ import type { NodeData, MindmapMode, DeleteNodePayload, EditNodePayload } from "
 import type { WorkspaceRole } from "@/services/dto/workspace.dto";
 import { canEditWorkspace } from "@/shared/utils/permissionUtils";
 import { useToast } from "@/shared/ui/ToastProvider";
+import { calculateChildPosition } from "../../utils/parentCenteredLayout";
 
 /**
  * 노드 CRUD 작업 핸들러를 제공하는 커스텀 훅
@@ -44,7 +45,7 @@ export function useNodeOperations(params: {
   findNonOverlappingPosition: (nodes: NodeData[], baseX: number, baseY: number) => { x: number; y: number };
   findEmptySpace: (nodes: NodeData[], preferredX: number, preferredY: number, minDistance?: number) => { x: number; y: number };
 }) {
-  const { crud, nodes, cyRef, mode, workspaceId, myRole, getRandomThemeColor, findNonOverlappingPosition, findEmptySpace } = params;
+  const { crud, nodes, cyRef, mode, workspaceId, myRole, getRandomThemeColor, findNonOverlappingPosition } = params;
   const { showToast } = useToast();
 
   /**
@@ -129,12 +130,20 @@ export function useNodeOperations(params: {
       return;
     }
 
-    // 선호 위치: 부모 노드 오른쪽 가까이
-    const preferredX = parentX + 200;
-    const preferredY = parentY;
-
-    // 캔버스 전체에서 가장 빈 공간 찾기 (최소 거리 160px)
-    const { x, y } = findEmptySpace(nodes, preferredX, preferredY, 160);
+    // 부모 기준 원형 배치 (형제 노드 고려, 100px 기본 거리, 150px 최소 거리 유지)
+    const { x, y } = calculateChildPosition(
+      parentX,
+      parentY,
+      parentNode.nodeId ?? null,
+      nodes,
+      {
+        baseRadius: 100,    // 부모-자식 기본 거리
+        minDistance: 150,   // 노드 간 최소 거리
+        angleBuffer: 15,    // 형제 노드 각도 버퍼 (도)
+        radiusStep: 50,     // 충돌 시 반지름 증가량
+        maxAttempts: 10,    // 반지름 증가 최대 시도
+      }
+    );
 
     const newNode: NodeData = {
       id: `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
@@ -158,7 +167,7 @@ export function useNodeOperations(params: {
     });
 
     crud.set(newNode.id, newNode);
-  }, [crud, findEmptySpace, getRandomThemeColor, nodes, workspaceId, myRole, showToast]);
+  }, [crud, getRandomThemeColor, nodes, workspaceId, myRole, showToast]);
 
   /**
    * 노드 삭제

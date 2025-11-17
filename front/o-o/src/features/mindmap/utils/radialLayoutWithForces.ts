@@ -135,6 +135,15 @@ export async function calculateRadialLayoutWithForces(
     children?: HierarchyNode[];
   }
 
+  // nodeId → node.id 매핑 생성 (parentId는 nodeId를 참조하므로)
+  const nodeIdToId = new Map<string | number, string>();
+  for (const node of nodes) {
+    if ("nodeId" in node && node.nodeId != null) {
+      nodeIdToId.set((node as any).nodeId, node.id);
+      nodeIdToId.set(String((node as any).nodeId), node.id);
+    }
+  }
+
   const nodeMap = new Map<string, HierarchyNode>();
   let rootId: string | null = null;
 
@@ -149,7 +158,9 @@ export async function calculateRadialLayoutWithForces(
   // 부모-자식 관계 구성
   for (const node of nodes) {
     if (node.parentId && node.parentId !== "0") {
-      const parent = nodeMap.get(String(node.parentId));
+      // parentId는 nodeId를 참조하므로, nodeId로 실제 node.id를 찾음
+      const parentNodeId = nodeIdToId.get(node.parentId) ?? nodeIdToId.get(String(node.parentId));
+      const parent = parentNodeId ? nodeMap.get(parentNodeId) : null;
       const child = nodeMap.get(node.id);
       if (parent && child) {
         parent.children ??= [];

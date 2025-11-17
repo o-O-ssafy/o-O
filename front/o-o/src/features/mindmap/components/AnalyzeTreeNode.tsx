@@ -52,10 +52,14 @@ export default function AnalyzeTreeNode({
       {/* 현재 노드 */}
       <div className="flex items-center gap-1 py-0.5 px-2 hover:bg-slate-100 rounded-md transition-colors group">
         {/* 트리 브랜치 문자 */}
-        <span className="font-mono text-slate-400 text-xs leading-none whitespace-pre select-none">{prefix}</span>
+        <span className="font-mono text-slate-400 text-xs leading-none whitespace-pre select-none">
+          {prefix}
+        </span>
 
         {/* 노드 텍스트 */}
-        <span className="flex-1 truncate text-sm text-slate-700">{node.keyword}</span>
+        <span className="flex-1 truncate text-sm text-slate-700">
+          {node.keyword}
+        </span>
 
         {/* 제거 버튼 */}
         <button

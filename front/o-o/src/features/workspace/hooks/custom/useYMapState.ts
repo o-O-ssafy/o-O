@@ -56,19 +56,33 @@ export const useYMapState = <TValue,>(
         }
       }
 
+      // 변경사항이 없으면 setState 호출하지 않음
+      if (changesToApply.length === 0) {
+        return;
+      }
+
       // 계산된 변경사항을 React state에 적용
       setState(prev => {
         const next = { ...prev };  // shallow copy
+        let hasChanges = false;
 
         for (const change of changesToApply) {
           if (change.action === 'delete') {
-            delete next[change.key];
+            if (change.key in next) {
+              delete next[change.key];
+              hasChanges = true;
+            }
           } else {
-            next[change.key] = change.value!;
+            // 값이 실제로 변경되었는지 체크 (shallow equality)
+            if (next[change.key] !== change.value) {
+              next[change.key] = change.value!;
+              hasChanges = true;
+            }
           }
         }
 
-        return next;
+        // 실제 변경사항이 없으면 이전 상태 반환 (참조 유지)
+        return hasChanges ? next : prev;
       });
     };
 

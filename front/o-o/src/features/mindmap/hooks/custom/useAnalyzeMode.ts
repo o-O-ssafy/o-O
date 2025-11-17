@@ -29,9 +29,12 @@ export function useAnalyzeMode(nodes: NodeData[], mode: MindmapMode) {
    * 노드 선택/해제 토글
    */
   const handleAnalyzeNodeToggle = useCallback((nodeId: string) => {
-    setAnalyzeSelection((prev) =>
-      prev.includes(nodeId) ? prev.filter((id) => id !== nodeId) : [...prev, nodeId]
-    );
+    setAnalyzeSelection((prev) => {
+      const newSelection = prev.includes(nodeId)
+        ? prev.filter((id) => id !== nodeId)
+        : [...prev, nodeId];
+      return newSelection;
+    });
   }, []);
 
   /**
@@ -61,11 +64,39 @@ export function useAnalyzeMode(nodes: NodeData[], mode: MindmapMode) {
 
   /**
    * 선택된 노드의 전체 데이터 (패널 표시용)
+   * nodes 배열이 협업 시스템에서 자주 변경되므로, 선택된 노드만 추출하여 안정적인 참조 유지
    */
-  const selectedAnalyzeNodes = useMemo(
-    () => nodes.filter((node) => analyzeSelection.includes(node.id)),
-    [nodes, analyzeSelection]
-  );
+  const selectedAnalyzeNodes = useMemo(() => {
+    // analyzeSelection의 순서를 유지하면서 노드 데이터를 가져옴
+    // node.id (MongoDB ObjectId)를 키로 사용
+    const nodeMapById = new Map(nodes.map((node) => [node.id, node]));
+
+    console.log("[useAnalyzeMode] 🗺️ Total nodes:", nodes.length);
+    console.log("[useAnalyzeMode] 🎯 Selection IDs:", analyzeSelection);
+    console.log(
+      "[useAnalyzeMode] 🔑 Node IDs in map:",
+      Array.from(nodeMapById.keys()).slice(0, 5),
+      "..."
+    );
+
+    const selectedNodes = analyzeSelection
+      .map((id) => {
+        const found = nodeMapById.get(id);
+        if (!found) {
+          console.warn("[useAnalyzeMode] ⚠️ Node NOT found for ID:", id);
+        }
+        return found;
+      })
+      .filter((node): node is NodeData => node !== undefined);
+
+    console.log(
+      "[useAnalyzeMode] ✅ Selected nodes:",
+      selectedNodes.length,
+      selectedNodes.map((n) => n.keyword)
+    );
+
+    return selectedNodes;
+  }, [nodes, analyzeSelection]);
 
   return {
     analyzeSelection,

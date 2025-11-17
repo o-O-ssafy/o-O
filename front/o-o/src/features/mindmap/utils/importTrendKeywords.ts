@@ -16,7 +16,7 @@ function calculateBoundingBox(existingNodes: NodeData[]): {
   let minY = Infinity;
   let maxY = -Infinity;
 
-  existingNodes.forEach(node => {
+  existingNodes.forEach((node) => {
     if (node.x < minX) minX = node.x;
     if (node.x > maxX) maxX = node.x;
     if (node.y < minY) minY = node.y;
@@ -65,8 +65,8 @@ export function convertTrendKeywordsToNodes(
     // 기존 마인드맵: 기존 노드들의 오른쪽에 배치
     const bbox = calculateBoundingBox(existingNodes);
     if (bbox) {
-      // 기존 노드들의 가장 오른쪽 + 여유 공간(500px)
-      startX = bbox.maxX + 500;
+      // 기존 노드들의 가장 오른쪽 + 여유 공간(300px)
+      startX = bbox.maxX + 300;
       // Y는 기존 노드들의 중간 높이에서 시작
       startY = (bbox.minY + bbox.maxY) / 2;
     } else {
@@ -89,7 +89,7 @@ export function convertTrendKeywordsToNodes(
       y: currentY,
       color: getRandomThemeColor(),
       parentId: parentId, // 이전 노드를 부모로 설정 (첫 번째는 undefined)
-      operation: 'ADD', // 백엔드 동기화를 위한 operation 타입 지정
+      operation: "ADD", // 백엔드 동기화를 위한 operation 타입 지정
     };
 
     nodes.push(newNode);

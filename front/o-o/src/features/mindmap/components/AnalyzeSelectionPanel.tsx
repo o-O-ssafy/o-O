@@ -24,7 +24,10 @@ export default function AnalyzeSelectionPanel({
   const [planDialogOpen, setPlanDialogOpen] = useState(false);
 
   // 선택된 노드들을 계층 구조로 변환
-  const treeRoots = useMemo(() => buildNodeTree(selectedNodes), [selectedNodes]);
+  const treeRoots = useMemo(() => {
+    const roots = buildNodeTree(selectedNodes);
+    return roots;
+  }, [selectedNodes]);
 
   const dialogContent = useMemo(() => {
     const keywordLines = selectedNodes
@@ -35,7 +38,9 @@ export default function AnalyzeSelectionPanel({
   }, [selectedNodes]);
 
   const planContent = useMemo(() => {
-    const keywordList = selectedNodes.map((node, idx) => `${idx + 1}. ${node.keyword}`).join("\n");
+    const keywordList = selectedNodes
+      .map((node, idx) => `${idx + 1}. ${node.keyword}`)
+      .join("\n");
     return `### 1. 기획 배경\n- 알고리즘 학습의 어려움: 완전탐색, BFS 같은 탐색 알고리즘은 개념은 단순하지만 실제 동작 과정을 이해하기 어려움.\n- 서비스화의 필요성: 단순한 코드 구현이 아니라, 시각화와 AI 설명을 통해 직관적으로 이해할 수 있는 환경 제공 필요.\n- 응용 가능성: BFS는 경로 탐색, 추천 시스템, 네트워크 분석 등 실무 개발 현장에서 핵심적으로 쓰이고 있어 교육뿐만 아니라 다양한 서비스로 확장 가능.\n\n### 2. 주요 기능\n1) 알고리즘 시각화 학습\n   - 완전탐색 & BFS 진행 과정을 단계별 애니메이션으로 제공.\n   - 큐, 그래프, 트리 구조 변화를 실시간으로 확인 가능.\n2) AI 튜터 챗봇\n   - 사용자가 문제를 입력하면 AI가 풀이 과정을 BFS 방식으로 설명.\n   - 완전탐색과 BFS를 비교하며 효율성 차이를 알려줌.\n3) 실전 응용 모듈\n   - 예: 지도 내 최단 경로 탐색, 추천 시스템 미니 시뮬레이션.\n   - 단순 이론이 아닌 실제 개발 서비스 맥락에서 BFS를 활용 경험 제공.\n\n### 3. 기대 효과\n- 학습 곡선 완화: 추상적인 알고리즘 개념을 시각적·대화형으로 설명함으로써 학습 곡선 완화.\n- 개발 실무 연결: 알고리즘을 단순 교육이 아니라 실제 서비스 기획과 연결해 학습자 동기 부여.\n\n### 🔖 참고 키워드\n${keywordList || "- (선택된 노드 없음)"}`;
   }, [selectedNodes]);
 
@@ -65,8 +70,12 @@ export default function AnalyzeSelectionPanel({
           <div className="flex items-center gap-2">
             <Lightbulb className="w-5 h-5 text-yellow-500" />
             <div>
-              <p className="text-sm font-semibold text-slate-700">선택된 노드</p>
-              <p className="text-xs text-slate-400">총 {selectedNodes.length}개</p>
+              <p className="text-sm font-semibold text-slate-700">
+                선택된 노드
+              </p>
+              <p className="text-xs text-slate-400">
+                총 {selectedNodes.length}개
+              </p>
             </div>
           </div>
           <button
@@ -93,11 +102,17 @@ export default function AnalyzeSelectionPanel({
               ))}
             </div>
           ) : (
-            <p className="text-xs text-slate-400 p-3">아직 선택된 노드가 없습니다.</p>
+            <p className="text-xs text-slate-400 p-3">
+              아직 선택된 노드가 없습니다.
+            </p>
           )}
         </div>
 
-        <Button onClick={handleAnalyzeClick} className="mt-4 w-full" disabled={!hasSelection}>
+        <Button
+          onClick={handleAnalyzeClick}
+          className="mt-4 w-full"
+          disabled={!hasSelection}
+        >
           분석하기
         </Button>
       </div>

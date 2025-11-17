@@ -63,10 +63,13 @@ export function buildNodeTree(selectedNodes: NodeData[]): TreeNode[] {
     }
 
     console.log(`[buildNodeTree] ${node.keyword}:`, {
+      nodeId: (node as any).nodeId,
+      id: node.id,
       parentId: node.parentId,
       parentIdNum: node.parentId ? Number(node.parentId) : null,
       actualParentId,
       hasParentInSelection: actualParentId ? nodeMap.has(actualParentId) : false,
+      isSelfParent: actualParentId === node.id,
       willBeRoot: !actualParentId || !nodeMap.has(actualParentId)
     });
 
