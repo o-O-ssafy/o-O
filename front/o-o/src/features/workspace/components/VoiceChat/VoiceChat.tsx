@@ -1,31 +1,63 @@
 // components/VoiceChat/VoiceChat.tsx
-import React, { useMemo, useEffect } from "react";
+import React, { useMemo, useEffect, useCallback, useRef } from "react";
 import VoiceAvatar from "./VoiceAvatar";
 import VoiceControls from "./VoiceContols";
 import { useVoiceChat } from "../../hooks/custom/useVoiceChat";
+import { useVoiceGpt } from "../../hooks/custom/useVoiceGpt";
+import { useGptNodeCreator } from "../../../mindmap/hooks/custom/useGptNodeCreator";
 import { usePeerCursors } from "../PeerCursorProvider";
 import { useAppSelector } from "@/store/hooks";
+import type { NodeData } from "../../../mindmap/types";
+import type { GptNodeSuggestion } from "../../types/voice.types";
 import { getProfileImageUrl } from "@/shared/utils/imageMapper";
-
 import type { YClient } from "../../hooks/custom/yjsClient";
+
+interface YjsCRUD {
+  create: (node: NodeData) => void;
+  read: (id: string) => NodeData | undefined;
+}
 
 interface VoiceChatProps {
   workspaceId: string;
+  crud: YjsCRUD | null;
+  nodes?: NodeData[];
+  myRole?: string;
   onCallEnd?: () => void;
   onOrganize?: () => void;
+  onGptRecordingChange?: (isRecording: boolean) => void;
+  onGptNodesReceived?: (nodes: GptNodeSuggestion[], createdNodeIds: string[]) => void;
+  onGptToggleReady?: (toggle: () => void) => void;
   yclient?: YClient | null;
   cursorColor?: string;
 }
 
 const VoiceChat: React.FC<VoiceChatProps> = ({
   workspaceId,
+  crud,
+  nodes = [],
+  myRole,
   onCallEnd,
   onOrganize,
+  onGptRecordingChange,
+  onGptNodesReceived,
+  onGptToggleReady,
   yclient,
   cursorColor,
 }) => {
   const currentUser = useAppSelector((state) => state.user.user);
   const { peers } = usePeerCursors();
+
+  // GPT Node Creator
+  const { createNodesFromGpt } = useGptNodeCreator(crud, workspaceId, nodes);
+
+  // Ref to store handleGptChunk function
+  const handleGptChunkRef = useRef<((content: string) => void) | null>(null);
+
+  // GPT 청크 핸들러
+  const onGptChunkReceived = useCallback((content: string) => {
+    // useVoiceGpt의 handleGptChunk 호출
+    handleGptChunkRef.current?.(content);
+  }, []);
 
   // Use the voice chat hook
   const {
@@ -37,11 +69,69 @@ const VoiceChat: React.FC<VoiceChatProps> = ({
     joinVoice,
     leaveVoice,
     toggleMute,
+    sendMessage,
+    connectionState,
   } = useVoiceChat({
     workspaceId,
     userId: currentUser?.id.toString(),
     enabled: false, // Manual join via button
+    onGptChunk: onGptChunkReceived,
+    onGptDone: (message) => {
+      console.log('[VoiceChat] ===== GPT Processing Complete =====');
+      console.log('[VoiceChat] 📊 Received GPT response:', {
+        nodeCount: message.nodes.length,
+        timestamp: new Date(message.timestamp).toISOString(),
+      });
+      console.log('[VoiceChat] 🎯 GPT Nodes:', message.nodes);
+
+      // 노드를 마인드맵에 추가하고 생성된 노드 ID들 받기
+      const createdNodeIds = createNodesFromGpt(message.nodes);
+
+      // 부모 컴포넌트에 노드와 생성된 ID들 전달 (ExtractedKeywordList에 표시하기 위해)
+      onGptNodesReceived?.(message.nodes, createdNodeIds);
+
+      console.log('[VoiceChat] ✅ GPT 노드 생성 완료 및 데이터 전달');
+    },
+    onGptError: (message) => {
+      console.error('[VoiceChat] ===== GPT Error =====');
+      console.error('[VoiceChat] ❌ Error message:', message.error);
+
+      if (message.rawText) {
+        console.error('[VoiceChat] 📄 Raw GPT response (failed to parse):');
+        console.error(message.rawText);
+        console.error('[VoiceChat] Response length:', message.rawText.length, 'characters');
+      } else {
+        console.error('[VoiceChat] ⚠️ No raw response available');
+      }
+
+      // TODO: 사용자에게 에러 알림 표시
+      console.log('[VoiceChat] 💡 TODO: Display error notification to user');
+    },
   });
+
+  // GPT Hook (only for UI state management - handlers are in useVoiceChat)
+  const gpt = useVoiceGpt({
+    sendMessage,
+    isConnected: connectionState === 'connected',
+    onGptChunk: () => {}, // Handled by useVoiceChat
+    onGptDone: () => {}, // Handled by useVoiceChat
+    onGptError: () => {}, // Handled by useVoiceChat
+  });
+
+  // handleGptChunk를 ref에 저장
+  useEffect(() => {
+    handleGptChunkRef.current = gpt.handleGptChunk;
+  }, [gpt.handleGptChunk]);
+
+  // GPT 녹음 상태 변경 시 부모에게 알림
+  useEffect(() => {
+    onGptRecordingChange?.(gpt.isRecording);
+  }, [gpt.isRecording, onGptRecordingChange]);
+
+  // GPT toggle 함수를 부모에게 전달
+  useEffect(() => {
+    onGptToggleReady?.(gpt.toggleRecording);
+  }, [gpt.toggleRecording, onGptToggleReady]);
 
   // Join voice chat on mount
   useEffect(() => {
@@ -149,9 +239,11 @@ const VoiceChat: React.FC<VoiceChatProps> = ({
       <VoiceControls
         isMuted={isMuted}
         isCallActive={isInVoice}
+        isGptRecording={gpt.isRecording}
+        showOrganize={myRole === "MAINTAINER"}
         onMicToggle={toggleMute}
         onCallToggle={handleCallToggle}
-        onOrganize={onOrganize}
+        onOrganize={gpt.toggleRecording}
         workspaceId={workspaceId}
         yclient={yclient}
         peers={peers}

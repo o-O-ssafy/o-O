@@ -66,6 +66,7 @@ export default function ColorPalette({
       const target = e.target as HTMLElement;
 
       // Radix UI portal 요소인지 확인 (Select dropdown 등)
+      
       const isRadixPortal =
         target.closest("[data-radix-popper-content-wrapper]") ||
         target.closest('[role="listbox"]') ||

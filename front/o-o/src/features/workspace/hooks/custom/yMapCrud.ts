@@ -9,6 +9,8 @@ export type YMapCrud<TValue> = {
   ) => void;
   remove: (key: string) => void;
   transact: (fn: (map: Y.Map<TValue>) => void) => void;
+  create: (value: TValue & { id: string }) => void;
+  read: (key: string) => TValue | undefined;
 };
 
 /**
@@ -57,6 +59,14 @@ export const createYMapCrud = <TValue,>(
     },
     transact(fn) {
       transact(() => fn(map));
+    },
+    create(value) {
+      transact(() => {
+        map.set(value.id, value);
+      });
+    },
+    read(key) {
+      return map.get(key);
     },
   };
 };

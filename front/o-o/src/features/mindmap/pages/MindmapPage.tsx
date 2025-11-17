@@ -1,6 +1,7 @@
 import React, { useRef, useMemo, useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import type { Core } from "cytoscape";
+import * as d3 from "d3";
 import type { Transform } from "../types";
 import { useWorkspaceAccessQuery } from "../../workspace/hooks/query/useWorkspaceAccessQuery";
 import { useWorkspacePermissions } from "../../workspace/hooks/custom/useWorkspacePermissions";
@@ -12,6 +13,7 @@ import { Textbox } from "../components/Textbox";
 import AnalyzeSelectionPanel from "../components/AnalyzeSelectionPanel";
 import D3Canvas from "../components/D3Canvas";
 import VoiceChat from "../../workspace/components/VoiceChat/VoiceChat";
+import { RecordIdeaDialog } from "../components/RecordIdea/RecordIdeaDialog";
 import { PeerCursorProvider } from "../../workspace/components/PeerCursorProvider";
 import { RemoteCursorsOverlay } from "../../workspace/components/RemoteCursorsOverlay";
 import { ChatBubblesOverlay } from "../../workspace/components/ChatBubblesOverlay";
@@ -26,6 +28,7 @@ import { useMindmapUIState } from "../hooks/custom/useMindmapUIState";
 import { useAnalyzeMode } from "../hooks/custom/useAnalyzeMode";
 import { useDetachedSelection } from "../hooks/custom/useDetachedSelection";
 import { useMindmapSync } from "../hooks/custom/useMindmapSync";
+import type { GptNodeSuggestion } from "../../workspace/types/voice.types";
 import {
   getPendingImportKeywords,
   clearPendingImportKeywords,
@@ -79,7 +82,6 @@ const MindmapPageContent: React.FC = () => {
     {
       enabled: true, // Mindmap 페이지에서는 항상 활성화
       onAuthError: () => {
-        console.warn("[MindmapPage] auth error in collaboration, navigate to home");
         navigate("/"); // 인증 실패 시 홈으로 리다이렉트
       },
       myRole: workspace?.myRole, // 워크스페이스 역할 전달
@@ -92,7 +94,6 @@ const MindmapPageContent: React.FC = () => {
   useEffect(() => {
     if (collab?.map) {
       (globalThis as any).yNodes = collab.map;
-      console.log("[MindmapPage] Yjs map exposed to window.yNodes");
     }
   }, [collab]);
 
@@ -111,6 +112,91 @@ const MindmapPageContent: React.FC = () => {
     setSelectedNodeId,
     setVoiceChatVisible,
   } = useMindmapUIState();
+
+  // 6a. GPT state for RecordIdeaDialog
+  const [isGptRecording, setIsGptRecording] = useState(false);
+  const [gptKeywords, setGptKeywords] = useState<{ id: string; label: string; children?: any[] }[]>([]);
+  const gptToggleRef = React.useRef<(() => void) | null>(null);
+
+  // GPT 노드를 트리 구조로 변환
+  const convertGptNodesToKeywords = (gptNodes: GptNodeSuggestion[], createdNodeIds: string[]) => {
+    return gptNodes.map((node, index) => ({
+      id: createdNodeIds[index],
+      label: node.keyword,
+      children: undefined, // GptNodeSuggestion에는 children이 없음 (flat 구조)
+    }));
+  };
+
+  // GPT 녹음 상태 변경 핸들러
+  const handleGptRecordingChange = (isRecording: boolean) => {
+    setIsGptRecording(isRecording);
+    if (!isRecording) {
+      // 녹음 종료 시 키워드 초기화는 하지 않음 (결과가 올 때까지 대기)
+    }
+  };
+
+  // GPT 토글 핸들러 (RecordIdeaDialog의 재생/일시정지 버튼용)
+  const handleToggleGptRecording = () => {
+    gptToggleRef.current?.();
+  };
+
+  // GPT 노드 수신 핸들러
+  const handleGptNodesReceived = (nodes: GptNodeSuggestion[], createdNodeIds: string[]) => {
+    const keywords = convertGptNodesToKeywords(nodes, createdNodeIds);
+    setGptKeywords(prev => [...prev, ...keywords]);
+  };
+
+  // 키워드 클릭 핸들러 - 해당 노드로 화면 이동
+  const handleKeywordClick = (nodeId: string) => {
+    // GPT 노드는 임시 ID를 사용하므로, nodes 배열에서 찾기
+    const targetNode = nodes.find(node => node.id === nodeId);
+
+    if (targetNode && canvasContainerRef.current) {
+      const svgElement = canvasContainerRef.current.querySelector('svg');
+      if (svgElement) {
+        // D3 zoom을 사용하여 노드 위치로 이동
+        const zoom = (svgElement as any).__zoom;
+        if (zoom) {
+          const containerRect = canvasContainerRef.current.getBoundingClientRect();
+          const centerX = containerRect.width / 2;
+          const centerY = containerRect.height / 2;
+
+          // 노드를 화면 중앙으로 이동
+          const transform = d3.zoomIdentity
+            .translate(centerX, centerY)
+            .scale(1)
+            .translate(-targetNode.x, -targetNode.y);
+
+          d3.select(svgElement)
+            .transition()
+            .duration(500)
+            .call((zoom as any).transform, transform);
+        }
+      }
+    }
+  };
+
+  // 키워드 삭제 핸들러 - UI와 실제 노드 모두 삭제
+  const handleDeleteKeyword = (nodeId: string) => {
+    // UI에서 키워드 제거
+    const removeNodeById = (nodes: typeof gptKeywords): typeof gptKeywords => {
+      return nodes.filter((node) => {
+        if (node.id === nodeId) {
+          return false;
+        }
+        if (node.children) {
+          node.children = removeNodeById(node.children);
+        }
+        return true;
+      });
+    };
+    setGptKeywords(removeNodeById(gptKeywords));
+
+    // 실제 노드도 삭제
+    if (crud) {
+      crud.remove(nodeId);
+    }
+  };
 
   // 7. Node operations hook
   const nodeOperations = useNodeOperations({
@@ -138,8 +224,6 @@ const MindmapPageContent: React.FC = () => {
 
     const pendingKeywords = getPendingImportKeywords();
     if (!pendingKeywords || pendingKeywords.length === 0) return;
-
-    console.log("[MindmapPage] 트렌드 키워드 임포트:", pendingKeywords);
 
     // viewport 중심 좌표 계산
     let startX = 0;
@@ -173,8 +257,6 @@ const MindmapPageContent: React.FC = () => {
 
     // 로컬스토리지에서 제거
     clearPendingImportKeywords();
-
-    console.log(`[MindmapPage] ${newNodes.length}개의 트렌드 키워드 노드 생성 완료`);
   }, [collab, crud, isBootstrapping, getRandomThemeColor]);
 
   // 🔄 Track D3 transform updates and container size
@@ -205,18 +287,15 @@ const MindmapPageContent: React.FC = () => {
 
     const cy = cyRef.current;
     if (!cy) {
-      console.log("[MindmapPage] cyRef.current is null, skip cursor binding");
       return;
     }
 
     const awareness = collab.client.provider.awareness;
     if (!awareness) {
-      console.log("[MindmapPage] provider.awareness is null");
       return;
     }
 
     let raf = 0;
-    let lastLog = 0;
 
     const handleMouseMove = (event: cytoscape.EventObject) => {
       if (raf) cancelAnimationFrame(raf);
@@ -235,16 +314,10 @@ const MindmapPageContent: React.FC = () => {
           color: cursorColorRef.current,
         };
 
-        if (Date.now() - lastLog > 3000) {
-          console.log("[MindmapPage] set cursor (model coords):", cursorData);
-          lastLog = Date.now();
-        }
-
         awareness.setLocalStateField("cursor", cursorData);
       });
     };
 
-    console.log("[MindmapPage] attach mousemove for awareness cursor + chatInput");
     cy.on("mousemove", handleMouseMove);
 
     return () => {
@@ -298,8 +371,14 @@ const MindmapPageContent: React.FC = () => {
           <div className="fixed top-1 md:top-4 left-1/2 -translate-x-1/2 z-50">
             <VoiceChat
               workspaceId={workspaceId}
+              crud={crud}
+              nodes={nodes}
+              myRole={workspace?.myRole}
               onCallEnd={() => setVoiceChatVisible(false)}
               onOrganize={() => console.log("Organize clicked")}
+              onGptRecordingChange={handleGptRecordingChange}
+              onGptNodesReceived={handleGptNodesReceived}
+              onGptToggleReady={(toggle) => { gptToggleRef.current = toggle; }}
               yclient={collab?.client}
               cursorColor={cursorColorRef.current ?? undefined}
             />
@@ -313,6 +392,19 @@ const MindmapPageContent: React.FC = () => {
         {mode === "edit" && (
           <div className="fixed bottom-2 left-1/2 -translate-x-1/2 z-50 w-[min(95vw,48rem)] px-2 md:bottom-4 md:px-4">
             <Textbox onAddNode={nodeOperations.handleAddNode} />
+          </div>
+        )}
+
+        {/* GPT Recording - RecordIdeaDialog */}
+        {(isGptRecording || gptKeywords.length > 0) && (
+          <div className="fixed top-24 right-4 z-40">
+            <RecordIdeaDialog
+              keywords={gptKeywords}
+              onDelete={handleDeleteKeyword}
+              onNodeClick={handleKeywordClick}
+              isRecording={isGptRecording}
+              onToggleRecording={handleToggleGptRecording}
+            />
           </div>
         )}
 

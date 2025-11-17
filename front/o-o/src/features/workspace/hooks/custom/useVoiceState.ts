@@ -37,8 +37,6 @@ export function useVoiceState(
         },
       });
     }
-
-    console.log('[useVoiceState] Mute toggled:', newMutedState);
   }, [localStream, isMuted, isConnected, sendMessage]);
 
   // Speaking detection using AudioContext
@@ -104,8 +102,6 @@ export function useVoiceState(
             },
           });
         }
-
-        console.log('[useVoiceState] Speaking state changed:', isCurrentlySpeaking);
       }
 
       animationFrameRef.current = requestAnimationFrame(detectSpeaking);

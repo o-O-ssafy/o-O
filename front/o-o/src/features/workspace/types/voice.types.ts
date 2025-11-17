@@ -70,6 +70,52 @@ export interface ServerShutdownMessage {
   message: string;
 }
 
+// GPT 관련 메시지 (Server → Client)
+export interface GptRecordingStartedMessage {
+  type: 'gpt-recording-started';
+  workspaceId: string;
+  startedBy: string;
+  timestamp: number;
+}
+
+export interface PeerTranscriptMessage {
+  type: 'peer-transcript';
+  userId: string;
+  userName: string;
+  text: string;
+  timestamp: number;
+}
+
+export interface GptChunkMessage {
+  type: 'gpt-chunk';
+  content: string;
+  timestamp: number;
+}
+
+export interface GptNodeSuggestion {
+  parentId: string | null;
+  keyword: string;
+  memo: string;
+}
+
+export interface GptDoneMessage {
+  type: 'gpt-done';
+  nodes: GptNodeSuggestion[];
+  timestamp: number;
+}
+
+export interface GptErrorMessage {
+  type: 'gpt-error';
+  error: string;
+  rawText?: string;
+  timestamp: number;
+}
+
+export interface GptSessionEndedMessage {
+  type: 'gpt-session-ended';
+  timestamp: number;
+}
+
 export type ServerMessage =
   | ParticipantsMessage
   | VoiceJoinedMessage
@@ -79,7 +125,13 @@ export type ServerMessage =
   | AnswerMessage
   | IceMessage
   | VoiceStateMessage
-  | ServerShutdownMessage;
+  | ServerShutdownMessage
+  | GptRecordingStartedMessage
+  | PeerTranscriptMessage
+  | GptChunkMessage
+  | GptDoneMessage
+  | GptErrorMessage
+  | GptSessionEndedMessage;
 
 // Client → Server Messages
 export interface SendOfferMessage {
@@ -105,8 +157,31 @@ export interface SendVoiceStateMessage {
   voiceState: VoiceState;
 }
 
+// GPT 관련 메시지 (Client → Server)
+export interface GptStartRecordingMessage {
+  type: 'gpt-start-recording';
+  userId: string;
+}
+
+export interface GptTranscriptMessage {
+  type: 'gpt-transcript';
+  userId: string;
+  userName: string;
+  text: string;
+  isFinal: boolean;
+  timestamp: number;
+}
+
+export interface GptStopRecordingMessage {
+  type: 'gpt-stop-recording';
+  userId: string;
+}
+
 export type ClientMessage =
   | SendOfferMessage
   | SendAnswerMessage
   | SendIceMessage
-  | SendVoiceStateMessage;
+  | SendVoiceStateMessage
+  | GptStartRecordingMessage
+  | GptTranscriptMessage
+  | GptStopRecordingMessage;

@@ -49,11 +49,6 @@ function NodeOverlay({
   const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
   const [hasMoved, setHasMoved] = useState(false);
 
-  // Debug: 메모 데이터 확인
-  useEffect(() => {
-    console.log(`[NodeOverlay ${node.id}] keyword: "${keyword}", memo: "${memo}", has memo: ${!!memo}`);
-  }, [node.id, keyword, memo]);
-
   const {
     isEditing,
     editValue,

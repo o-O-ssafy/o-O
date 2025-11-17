@@ -50,25 +50,15 @@ export function PeerCursorProvider({
     const updatePeers = () => {
       const next: PeerCursor[] = [];
       const selfId = awareness.clientID;
-      const rawStates: Array<[number, unknown]> = [];
-
-      console.log("🔍 [PeerCursorProvider] updatePeers called, selfId:", selfId);
-      console.log("🔍 [PeerCursorProvider] awareness.getStates() size:", awareness.getStates().size);
 
       for (const [id, state] of awareness.getStates()) {
-        rawStates.push([id, state]);
-        console.log(`🔍 [PeerCursorProvider] Processing peer ${id}:`, state);
-
         if (id === selfId) {
-          console.log("   ↳ Skipping self");
           continue;
         }
 
         const cursor = (state as { cursor?: PeerCursor; user?: { userId?: number; name?: string; email?: string; profileImage?: string; role?: WorkspaceRole } }).cursor;
-        console.log(`   ↳ Cursor data:`, cursor);
 
         if (!cursor) {
-          console.log("   ↳ No cursor, skipping");
           continue;
         }
 
@@ -84,12 +74,9 @@ export function PeerCursorProvider({
           profileImage: userState?.profileImage,
           role: userState?.role, // role 추가
         };
-        console.log(`   ↳ Adding peer:`, peer);
         next.push(peer);
       }
 
-      console.log("🔍 [PeerCursorProvider] Final peers array:", next);
-      console.debug("[PeerCursorProvider] awareness states", rawStates);
       setPeers(next);
     };
 
