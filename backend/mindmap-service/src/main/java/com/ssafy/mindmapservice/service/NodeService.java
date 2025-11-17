@@ -10,13 +10,20 @@ import com.ssafy.mindmapservice.dto.request.NodePositionUpdateRequest;
 import com.ssafy.mindmapservice.dto.response.InitialMindmapResponse;
 import com.ssafy.mindmapservice.dto.kafka.NodeContextDto;
 import com.ssafy.mindmapservice.dto.response.NodeSimpleResponse;
+import com.ssafy.mindmapservice.dto.response.NodeResponse;
+import com.ssafy.mindmapservice.dto.request.ImageNodeCreateRequest;
 import com.ssafy.mindmapservice.kafka.AiAnalysisProducer;
 import com.ssafy.mindmapservice.repository.NodeRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
 
@@ -31,10 +38,46 @@ public class NodeService {
     private final SequenceGeneratorService sequenceGeneratorService;
     private final TrendEventPublisher trendEventPublisher;
     private final PublicIndexSyncService publicIndexSyncService;
+    private final ImageService imageService;
 
     public List<MindmapNode> getNodesByWorkspace(Long workspaceId) {
         log.info("Getting all nodes for workspace: {}", workspaceId);
         return nodeRepository.findByWorkspaceId(workspaceId);
+    }
+
+    /**
+     * 워크스페이스의 모든 노드를 조회하고, image 타입 노드의 경우 presigned URL로 변환합니다.
+     * - image 타입: keyword (S3 key) → presigned URL로 변환
+     * - video 타입: keyword (유튜브 링크) 그대로 사용
+     * - text 타입: keyword (텍스트) 그대로 사용
+     *
+     * @param workspaceId 워크스페이스 ID
+     * @return 노드 응답 리스트 (image 타입은 presigned URL 포함)
+     */
+    public List<NodeResponse> getNodesWithPresignedUrls(Long workspaceId) {
+        log.info("Getting all nodes with presigned URLs for workspace: {}", workspaceId);
+        List<MindmapNode> nodes = nodeRepository.findByWorkspaceId(workspaceId);
+
+        return nodes.stream()
+                .map(node -> {
+                    String resolvedKeyword = node.getKeyword();
+
+                    // image 타입인 경우 S3 key를 presigned URL로 변환
+                    if ("image".equals(node.getType()) && node.getKeyword() != null && !node.getKeyword().isBlank()) {
+                        try {
+                            resolvedKeyword = imageService.generateImagePresignedUrl(
+                                    node.getKeyword(),
+                                    Duration.ofHours(1)
+                            );
+                            log.debug("Generated presigned URL for image node: nodeId={}", node.getNodeId());
+                        } catch (Exception e) {
+                            log.error("Failed to generate presigned URL for nodeId={}", node.getNodeId(), e);
+                        }
+                    }
+
+                    return NodeResponse.from(node, resolvedKeyword);
+                })
+                .toList();
     }
 
     /**
@@ -126,9 +169,8 @@ public class NodeService {
 
         // 2) 여기서 한 번만 PUBLIC 여부 조회
         boolean isPublic = workspaceServiceClientAdapter.isPublic(workspaceId);
-        // isPublic()은 네가 아까 만든 getVisibility 래핑 버전이라고 가정
 
-        // 3) 🔥 트렌드 집계 이벤트 발행 (PUBLIC인 경우에만)
+        // 3) 트렌드 집계 이벤트 발행 (PUBLIC인 경우에만)
         try {
             String childKeyword = saved.getKeyword();
 
@@ -153,14 +195,71 @@ public class NodeService {
                     workspaceId, parentKeyword, childKeyword, isPublic);
 
         } catch (Exception e) {
-            // 트렌드 집계 실패해도 노드 저장은 깨지지 않게
             log.error("Failed to publish trend relation add event for nodeId={}", saved.getNodeId(), e);
         }
 
-        // 4) 🔥 ES 인덱싱 (역시 PUBLIC일 때만)
+        // 4) ES 인덱싱 (PUBLIC일 때만)
         publicIndexSyncService.indexNodeIfWorkspacePublic(saved, isPublic);
 
         return saved;
+    }
+
+    /**
+     * 이미지 파일을 업로드하고 이미지 노드를 생성합니다.
+     * 1. S3에 이미지 파일 업로드
+     * 2. S3 key를 keyword에 저장하여 노드 생성
+     *
+     * @param workspaceId 워크스페이스 ID
+     * @param file 업로드할 이미지 파일
+     * @param request 노드 생성 정보 (parentId, memo, x, y, color)
+     * @return 생성된 이미지 노드
+     */
+    public MindmapNode createImageNode(Long workspaceId, MultipartFile file, ImageNodeCreateRequest request) {
+        log.info("Creating image node: workspaceId={}, fileName={}", workspaceId, file.getOriginalFilename());
+
+        // 1. 이미지 S3 업로드
+        String imageKey = imageService.uploadImage(file);
+        log.debug("Image uploaded to S3: key={}", imageKey);
+
+        // 2. 이미지 노드 생성
+        MindmapNode node = MindmapNode.builder()
+                .workspaceId(workspaceId)
+                .parentId(request.parentId())
+                .type("image")
+                .keyword(imageKey)  // S3 key 저장
+                .memo(request.memo())
+                .x(request.x())
+                .y(request.y())
+                .color(request.color())
+                .build();
+
+        MindmapNode created = createNode(node);
+        log.info("Image node created: workspaceId={}, nodeId={}, imageKey={}",
+                workspaceId, created.getNodeId(), imageKey);
+
+        return created;
+    }
+
+    /**
+     * 이미지 파일을 업로드하고 초기 마인드맵을 생성합니다.
+     * 컨트롤러에서 이미지 업로드를 담당하는 경우 사용
+     *
+     * @param file 업로드할 이미지 파일
+     * @param userId 사용자 ID
+     * @param startPrompt 사용자 프롬프트
+     * @return 생성된 워크스페이스 및 노드 정보
+     */
+    @Transactional
+    public InitialMindmapResponse createInitialMindmapWithImageFile(MultipartFile file, Long userId, String startPrompt) {
+        log.info("Creating initial mindmap with image file: userId={}, fileName={}",
+                userId, file.getOriginalFilename());
+
+        // 1. 이미지 S3 업로드
+        String imageKey = imageService.uploadImage(file);
+        log.debug("Image uploaded to S3: key={}", imageKey);
+
+        // 2. 기존 메서드 재사용
+        return createInitialMindmapWithImage(userId, imageKey, startPrompt);
     }
 
 

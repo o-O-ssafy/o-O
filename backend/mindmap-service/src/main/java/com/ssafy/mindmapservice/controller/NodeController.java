@@ -5,8 +5,10 @@ import com.ssafy.mindmapservice.dto.request.AiAnalysisRequest;
 import com.ssafy.mindmapservice.dto.request.BatchPositionUpdateRequest;
 import com.ssafy.mindmapservice.dto.request.InitialMindmapRequest;
 import com.ssafy.mindmapservice.dto.request.VoiceIdeaRequest;
+import com.ssafy.mindmapservice.dto.request.ImageNodeCreateRequest;
 import com.ssafy.mindmapservice.dto.response.InitialMindmapResponse;
 import com.ssafy.mindmapservice.dto.response.NodeSimpleResponse;
+import com.ssafy.mindmapservice.dto.response.NodeResponse;
 import com.ssafy.mindmapservice.dto.request.WorkspaceCloneRequest;
 import com.ssafy.mindmapservice.service.NodeService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -190,30 +192,33 @@ public class NodeController {
         log.info("POST /mindmap/initial/image - userId={}, fileName={}, startPrompt={}",
                 userId, file.getOriginalFilename(), startPrompt);
 
-        // TODO: S3에 이미지 업로드
-        log.info("Image uploaded to S3: {}", "imageUrl");
-
-        // 2. 마인드맵 생성
-        InitialMindmapResponse response = nodeService.createInitialMindmapWithImage(
-                Long.parseLong(userId), "imageUrl", startPrompt);
+        InitialMindmapResponse response = nodeService.createInitialMindmapWithImageFile(
+                file, Long.parseLong(userId), startPrompt);
 
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(response);
     }
 
     @Operation(
             summary = "워크스페이스의 모든 노드 조회",
-            description = "특정 워크스페이스에 속한 모든 마인드맵 노드를 조회합니다."
+            description = """
+                    특정 워크스페이스에 속한 모든 마인드맵 노드를 조회합니다.
+
+                    ### 노드 타입별 keyword 처리
+                    - **image**: S3 key → presigned URL로 변환 (1시간 유효)
+                    - **video**: 유튜브 링크 그대로 반환
+                    - **text**: 텍스트 키워드 그대로 반환
+                    """
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "노드 목록 조회 성공"),
             @ApiResponse(responseCode = "404", description = "워크스페이스를 찾을 수 없음", content = @Content)
     })
     @GetMapping("/{workspaceId}/nodes")
-    public ResponseEntity<List<MindmapNode>> getNodes(
+    public ResponseEntity<List<NodeResponse>> getNodes(
             @Parameter(description = "워크스페이스 ID", required = true, example = "123")
             @PathVariable Long workspaceId) {
         log.info("GET /mindmap/{}/nodes", workspaceId);
-        List<MindmapNode> nodes = nodeService.getNodesByWorkspace(workspaceId);
+        List<NodeResponse> nodes = nodeService.getNodesWithPresignedUrls(workspaceId);
         return ResponseEntity.ok(nodes);
     }
 
@@ -302,12 +307,17 @@ public class NodeController {
     }
 
     @Operation(
-            summary = "노드 생성",
-            description = "워크스페이스에 새로운 마인드맵 노드를 생성합니다. nodeId는 자동으로 생성됩니다."
+            summary = "노드 생성 (텍스트/비디오)",
+            description = """
+                    워크스페이스에 새로운 마인드맵 노드를 생성합니다. nodeId는 자동으로 생성됩니다.
+
+                    **지원 타입**: text, video
+                    **이미지 노드**: POST /{workspaceId}/node/image 사용
+                    """
     )
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "노드 생성 성공"),
-            @ApiResponse(responseCode = "400", description = "잘못된 요청", content = @Content),
+            @ApiResponse(responseCode = "400", description = "잘못된 요청 (image 타입은 /node/image 사용)", content = @Content),
             @ApiResponse(responseCode = "404", description = "워크스페이스를 찾을 수 없음", content = @Content)
     })
     @PostMapping("/{workspaceId}/node")
@@ -319,25 +329,83 @@ public class NodeController {
                     required = true,
                     content = @Content(
                             mediaType = "application/json",
-                            examples = @ExampleObject(
-                                    value = """
-                                            {
-                                              "parentId": 1,
-                                              "type": "text",
-                                              "keyword": "새 아이디어",
-                                              "memo": "메모 내용",
-                                              "x": 100.0,
-                                              "y": 200.0,
-                                              "color": "#3b82f6"
-                                            }
-                                            """
-                            )
+                            examples = {
+                                    @ExampleObject(
+                                            name = "텍스트 노드",
+                                            value = """
+                                                    {
+                                                      "parentId": 1,
+                                                      "type": "text",
+                                                      "keyword": "새 아이디어",
+                                                      "memo": "메모 내용",
+                                                      "x": 100.0,
+                                                      "y": 200.0,
+                                                      "color": "#3b82f6"
+                                                    }
+                                                    """
+                                    ),
+                                    @ExampleObject(
+                                            name = "비디오 노드",
+                                            value = """
+                                                    {
+                                                      "parentId": 1,
+                                                      "type": "video",
+                                                      "keyword": "https://youtu.be/qDG3auuSb1E",
+                                                      "memo": "유튜브 영상",
+                                                      "x": 100.0,
+                                                      "y": 200.0,
+                                                      "color": "#3b82f6"
+                                                    }
+                                                    """
+                                    )
+                            }
                     )
             )
             @RequestBody MindmapNode node) {
-        log.info("POST /mindmap/{}/node", workspaceId);
+        log.info("POST /mindmap/{}/node - type={}", workspaceId, node.getType());
+
+        // image 타입은 /node/image 엔드포인트 사용
+        if ("image".equals(node.getType())) {
+            throw new IllegalArgumentException("Image nodes must be created via POST /{workspaceId}/node/image endpoint");
+        }
+
         node.setWorkspaceId(workspaceId);
         MindmapNode created = nodeService.createNode(node);
+        return ResponseEntity.status(HttpStatus.CREATED).body(created);
+    }
+
+    @Operation(
+            summary = "이미지 노드 생성",
+            description = """
+                    워크스페이스에 이미지 파일을 업로드하여 새로운 이미지 노드를 생성합니다.
+
+                    ### 처리 흐름
+                    1. 이미지 파일을 S3에 업로드
+                    2. S3 key를 keyword에 저장하여 노드 생성
+                    3. 조회 시 presigned URL로 자동 변환됨
+
+                    ### 요청 형식
+                    - Content-Type: multipart/form-data
+                    - file: 이미지 파일 (binary)
+                    - request: JSON 객체 {"parentId": 1, "memo": "메모", "x": 100.0, "y": 200.0, "color": "#3b82f6"}
+                    """
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "이미지 노드 생성 성공"),
+            @ApiResponse(responseCode = "400", description = "잘못된 요청 (파일 누락 등)", content = @Content),
+            @ApiResponse(responseCode = "404", description = "워크스페이스를 찾을 수 없음", content = @Content)
+    })
+    @PostMapping(value = "/{workspaceId}/node/image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<MindmapNode> createImageNode(
+            @Parameter(description = "워크스페이스 ID", required = true, example = "123")
+            @PathVariable Long workspaceId,
+            @Parameter(description = "업로드할 이미지 파일", required = true)
+            @RequestPart("file") MultipartFile file,
+            @Parameter(description = "노드 생성 정보 (JSON)")
+            @RequestPart("request") ImageNodeCreateRequest request) {
+        log.info("POST /mindmap/{}/node/image - fileName={}", workspaceId, file.getOriginalFilename());
+
+        MindmapNode created = nodeService.createImageNode(workspaceId, file, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 
