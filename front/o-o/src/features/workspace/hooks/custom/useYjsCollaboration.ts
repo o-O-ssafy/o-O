@@ -10,6 +10,7 @@ import { fetchWebSocketToken } from "@/services/websocketTokenService";
 import type { WorkspaceRole } from "@/services/dto/workspace.dto";
 import { useQueryClient } from "@tanstack/react-query";
 import { fetchMindmapNodes } from "@/services/mindmapService";
+import { mapDtoToNodeData } from "@/services/dto/mindmap.dto";
 import {
   isInitialCreateDoneNotification,
   isRoleUpdateNotification,
@@ -255,9 +256,16 @@ export function useYjsCollaboration(
           queryClient.invalidateQueries({ queryKey: ["workspace", roomId] });
         }
 
+        // initial-create-done: nodes 배열이 없을 때만 REST API 호출
+        // nodes가 포함되어 있으면 onJsonMessage 핸들러에서 처리
         if (isInitialCreateDoneNotification(message)) {
-          console.log("[useYjsCollaboration] initial-create-done notification received, syncing nodes");
-          void hydrateMindmapNodesFromRest();
+          const msg = message as any;
+          if (!msg.nodes || !Array.isArray(msg.nodes) || msg.nodes.length === 0) {
+            console.log("[useYjsCollaboration] initial-create-done (no nodes in message), fetching from REST");
+            void hydrateMindmapNodesFromRest();
+          } else {
+            console.log("[useYjsCollaboration] initial-create-done (nodes included in message), handled by onJsonMessage");
+          }
         }
       });
 
@@ -307,8 +315,50 @@ export function useYjsCollaboration(
         client.onJsonMessage((data) => {
           console.log("💬 [useYjsCollaboration] Received JSON message:", data);
 
+          // 아이디어 추가 완료 (GPT 키워드 추출) - 두 가지 타입 모두 지원
+          if ((data.type === "add-idea-done" || data.type === "initial-create-done") && data.nodes && Array.isArray(data.nodes)) {
+            console.log(`💡 ${data.type}: syncing`, data.nodes.length, "nodes");
+
+            const nodesMap = client.doc.getMap<NodeData>(NODES_YMAP_KEY);
+
+            // DTO를 NodeData로 변환 (mapDtoToNodeData 사용)
+            const nodeDatas = data.nodes.map((nodeDto: any) => mapDtoToNodeData(nodeDto));
+
+            // 중복 제거: 같은 nodeId를 가진 노드가 이미 있으면 로컬 노드를 제거하고 서버 노드로 교체
+            const existingNodeIds = new Map<number, string>();
+            nodesMap.forEach((node, id) => {
+              if (node.nodeId) {
+                existingNodeIds.set(node.nodeId as number, id);
+              }
+            });
+
+            // Y.Doc에 새 노드 추가 (origin: "remote"로 설정하여 useMindmapSync 재진입 방지)
+            client.doc.transact(() => {
+              for (const nodeData of nodeDatas) {
+                if (nodeData.nodeId && existingNodeIds.has(nodeData.nodeId as number)) {
+                  const existingId = existingNodeIds.get(nodeData.nodeId as number)!;
+
+                  // 서버 노드(MongoDB ID)가 아닌 로컬 노드(타임스탬프 ID)만 교체
+                  if (existingId !== nodeData.id && existingId.includes("-")) {
+                    // 로컬 노드를 제거하고 서버 노드로 교체
+                    nodesMap.delete(existingId);
+                    nodesMap.set(nodeData.id, nodeData);
+                    existingNodeIds.set(nodeData.nodeId as number, nodeData.id);
+                  }
+                  // 이미 서버 노드가 있으면 건너뜀
+                  continue;
+                }
+
+                if (!nodesMap.has(nodeData.id)) {
+                  nodesMap.set(nodeData.id, nodeData);
+                }
+              }
+            }, "remote");
+
+            console.log(`✅ ${data.type} nodes synced to Y.Map`);
+          }
           // AI + 트렌드 통합 추천 결과
-          if (data.type === "ai_suggestion" && data.targetNodeId) {
+          else if (data.type === "ai_suggestion" && data.targetNodeId) {
             console.log("🤖 AI+Trend Recommendation received for node:", data.targetNodeId);
 
             if (onAiRecommendation) {

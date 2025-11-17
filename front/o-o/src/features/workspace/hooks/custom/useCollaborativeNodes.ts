@@ -213,6 +213,8 @@ export function useCollaborativeNodes(
   }, [nodesState]);
 
   // 🔥 좌표가 null인 노드들을 자동으로 재계산하여 업데이트
+  const isCalculatingRef = useRef(false);
+
   useEffect(() => {
     if (!collab || nodes.length === 0) return;
 
@@ -223,55 +225,69 @@ export function useCollaborativeNodes(
       return;
     }
 
+    // 이미 계산 중이면 스킵 (중복 실행 방지)
+    if (isCalculatingRef.current) {
+      console.log("[useCollaborativeNodes] 🔧 Position calculation already in progress, skipping...");
+      return;
+    }
+
     // 전체 노드에 대해 좌표 재계산 (async)
     const updatePositions = async () => {
-      const processedNodes = await calculateNodePositions(nodes);
+      isCalculatingRef.current = true;
+      console.log("[useCollaborativeNodes] 🔧 Starting position calculation for", nullPositionNodes.length, "nodes");
 
-      // 자동 계산된 좌표를 추적 (서버에 저장하기 위해)
-      const updatedNodesForServer: Array<{
-        nodeId: number;
-        x: number;
-        y: number;
-      }> = [];
+      try {
+        const processedNodes = await calculateNodePositions(nodes);
 
-      // Yjs map에 업데이트
-      collab.client.doc.transact(() => {
-        for (const node of processedNodes) {
-          if (node.x != null && node.y != null) {
-            const existingNode = collab.map.get(node.id);
-            if (
-              existingNode &&
-              (existingNode.x == null || existingNode.y == null)
-            ) {
-              collab.map.set(node.id, {
-                ...existingNode,
-                x: node.x,
-                y: node.y,
-              });
+        // 자동 계산된 좌표를 추적 (서버에 저장하기 위해)
+        const updatedNodesForServer: Array<{
+          nodeId: number;
+          x: number;
+          y: number;
+        }> = [];
 
-              // nodeId가 있으면 서버 업데이트 목록에 추가
-              if (existingNode.nodeId) {
-                updatedNodesForServer.push({
-                  nodeId: existingNode.nodeId as number,
+        // Yjs map에 업데이트
+        collab.client.doc.transact(() => {
+          for (const node of processedNodes) {
+            if (node.x != null && node.y != null) {
+              const existingNode = collab.map.get(node.id);
+              if (
+                existingNode &&
+                (existingNode.x == null || existingNode.y == null)
+              ) {
+                collab.map.set(node.id, {
+                  ...existingNode,
                   x: node.x,
                   y: node.y,
                 });
+
+                // nodeId가 있으면 서버 업데이트 목록에 추가
+                if (existingNode.nodeId) {
+                  updatedNodesForServer.push({
+                    nodeId: existingNode.nodeId as number,
+                    x: node.x,
+                    y: node.y,
+                  });
+                }
               }
             }
           }
-        }
-      }, "position-update");
+        }, "position-update");
 
-      // 자동 계산된 좌표를 서버에 저장
-      if (updatedNodesForServer.length > 0) {
-        try {
-          await batchUpdateNodePositions(workspaceId, updatedNodesForServer);
-        } catch (error) {
-          console.error(
-            `[useCollaborativeNodes] 🔧 Failed to save position updates:`,
-            error
-          );
+        // 자동 계산된 좌표를 서버에 저장
+        if (updatedNodesForServer.length > 0) {
+          try {
+            await batchUpdateNodePositions(workspaceId, updatedNodesForServer);
+            console.log("[useCollaborativeNodes] ✅ Position calculation complete, saved", updatedNodesForServer.length, "nodes");
+          } catch (error) {
+            console.error(
+              `[useCollaborativeNodes] 🔧 Failed to save position updates:`,
+              error
+            );
+          }
         }
+      } finally {
+        isCalculatingRef.current = false;
       }
     };
 
