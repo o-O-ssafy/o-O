@@ -772,9 +772,10 @@ public class NodeService {
         MindmapNode createdNode = createNode(rootNode);
         log.info("Image root node created: workspaceId={}, nodeId={}", workspaceId, createdNode.getNodeId());
 
+        String requestImageUrl = imageService.generateImagePresignedUrl(imageUrl, Duration.ofHours(1));
         // 3. INITIAL AI 분석 요청
         sendInitialAnalysisRequest(workspaceId, createdNode.getNodeId(),
-                imageUrl, "IMAGE", startPrompt);
+                requestImageUrl, "IMAGE", startPrompt);
 
         // 4. 응답 생성
         return buildInitialMindmapResponse(workspaceId, createdNode);
