@@ -806,13 +806,26 @@ public class NodeService {
      * InitialMindmapResponse를 생성합니다. (공통 로직)
      */
     private InitialMindmapResponse buildInitialMindmapResponse(Long workspaceId, MindmapNode createdNode) {
-        return new InitialMindmapResponse(
-                workspaceId,
-                createdNode.getNodeId(),
-                createdNode.getKeyword(),
-                createdNode.getMemo(),
-                createdNode.getAnalysisStatus().name(),
-                "마인드맵이 생성되었습니다. AI 분석이 진행 중입니다."
-        );
+        if(createdNode.getType().equals("image")){
+            return new InitialMindmapResponse(
+                    workspaceId,
+                    createdNode.getNodeId(),
+                    imageService.generateImagePresignedUrl(createdNode.getKeyword(), Duration.ofHours(1)),
+                    createdNode.getMemo(),
+                    createdNode.getAnalysisStatus().name(),
+                    "마인드맵이 생성되었습니다. AI 분석이 진행 중입니다."
+            );
+        }
+        else{
+            return new InitialMindmapResponse(
+                    workspaceId,
+                    createdNode.getNodeId(),
+                    createdNode.getKeyword(),
+                    createdNode.getMemo(),
+                    createdNode.getAnalysisStatus().name(),
+                    "마인드맵이 생성되었습니다. AI 분석이 진행 중입니다."
+            );
+        }
+
     }
 }
