@@ -47,4 +47,17 @@ public record CreatedNodeInfo(
                 node.getY()
         );
     }
+
+    public static CreatedNodeInfo fromContainImage(MindmapNode node, String imageUrl) {
+        return new CreatedNodeInfo(
+                node.getNodeId(),
+                node.getParentId(),
+                node.getType(),
+                imageUrl,
+                node.getMemo(),
+                node.getColor(),
+                node.getX(),
+                node.getY()
+        );
+    }
 }

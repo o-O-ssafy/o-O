@@ -7,10 +7,7 @@ import com.ssafy.mindmapservice.dto.request.BatchPositionUpdateRequest;
 import com.ssafy.mindmapservice.dto.request.InitialMindmapRequest;
 import com.ssafy.mindmapservice.dto.request.VoiceIdeaRequest;
 import com.ssafy.mindmapservice.dto.request.ImageNodeCreateRequest;
-import com.ssafy.mindmapservice.dto.response.AddIdeaResponse;
-import com.ssafy.mindmapservice.dto.response.InitialMindmapResponse;
-import com.ssafy.mindmapservice.dto.response.NodeSimpleResponse;
-import com.ssafy.mindmapservice.dto.response.NodeResponse;
+import com.ssafy.mindmapservice.dto.response.*;
 import com.ssafy.mindmapservice.dto.request.WorkspaceCloneRequest;
 import com.ssafy.mindmapservice.service.NodeAiService;
 import com.ssafy.mindmapservice.service.NodeService;
@@ -400,7 +397,7 @@ public class NodeController {
             @ApiResponse(responseCode = "404", description = "워크스페이스를 찾을 수 없음", content = @Content)
     })
     @PostMapping(value = "/{workspaceId}/node/image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<MindmapNode> createImageNode(
+    public ResponseEntity<CreatedNodeInfo> createImageNode(
             @Parameter(description = "워크스페이스 ID", required = true, example = "123")
             @PathVariable Long workspaceId,
             @Parameter(description = "업로드할 이미지 파일", required = true)
@@ -409,7 +406,7 @@ public class NodeController {
             @RequestPart("request") ImageNodeCreateRequest request) {
         log.info("POST /mindmap/{}/node/image - fileName={}", workspaceId, file.getOriginalFilename());
 
-        MindmapNode created = nodeService.createImageNode(workspaceId, file, request);
+        CreatedNodeInfo created = nodeService.createImageNode(workspaceId, file, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 

@@ -7,6 +7,7 @@ import com.ssafy.mindmapservice.dto.request.AiAnalysisRequest;
 import com.ssafy.mindmapservice.dto.kafka.AiNodeResult;
 import com.ssafy.mindmapservice.dto.request.InitialMindmapRequest;
 import com.ssafy.mindmapservice.dto.request.NodePositionUpdateRequest;
+import com.ssafy.mindmapservice.dto.response.CreatedNodeInfo;
 import com.ssafy.mindmapservice.dto.response.InitialMindmapResponse;
 import com.ssafy.mindmapservice.dto.kafka.NodeContextDto;
 import com.ssafy.mindmapservice.dto.response.NodeSimpleResponse;
@@ -214,7 +215,7 @@ public class NodeService {
      * @param request 노드 생성 정보 (parentId, memo, x, y, color)
      * @return 생성된 이미지 노드
      */
-    public MindmapNode createImageNode(Long workspaceId, MultipartFile file, ImageNodeCreateRequest request) {
+    public CreatedNodeInfo createImageNode(Long workspaceId, MultipartFile file, ImageNodeCreateRequest request) {
         log.info("Creating image node: workspaceId={}, fileName={}", workspaceId, file.getOriginalFilename());
 
         // 1. 이미지 S3 업로드
@@ -237,7 +238,7 @@ public class NodeService {
         log.info("Image node created: workspaceId={}, nodeId={}, imageKey={}",
                 workspaceId, created.getNodeId(), imageKey);
 
-        return created;
+        return CreatedNodeInfo.fromContainImage(created, imageService.generateImagePresignedUrl(imageKey, Duration.ofHours(1)));
     }
 
     /**
