@@ -95,18 +95,19 @@ public class NodeController {
                     examples = {
                             @ExampleObject(
                                     name = "텍스트 프롬프트 예시",
-                                    summary = "텍스트로 마인드맵 생성",
+                                    summary = "텍스트로 마인드맵 생성, New Project로 들어갔을 떄의 값",
                                     value = """
                                             {
                                               "contentUrl": null,
                                               "contentType": "TEXT",
-                                              "startPrompt": "고기랑 관련된 아이디어 없을까?"
+                                              "startPrompt": "고기랑 관련된 아이디어 없을까?",
+                                              "workspaceId": 1
                                             }
                                             """
                             ),
                             @ExampleObject(
                                     name = "영상 콘텐츠 예시",
-                                    summary = "유튜브 영상으로 마인드맵 생성",
+                                    summary = "유튜브 영상으로 마인드맵 생성, 홈 화면에서의 값",
                                     value = """
                                             {
                                               "contentUrl": "https://youtu.be/qDG3auuSb1E",
@@ -191,7 +192,7 @@ public class NodeController {
             @Parameter(description = "사용자 프롬프트")
             @RequestParam(value = "startPrompt", defaultValue = "") String startPrompt,
             @Parameter(description = "방 번호, null 가능")
-            @RequestParam("workspaceId") Long workspaceId
+            @RequestParam(value = "workspaceId", required = false) Long workspaceId
             ) {
         log.info("POST /mindmap/initial/image - userId={}, fileName={}, startPrompt={}",
                 userId, file.getOriginalFilename(), startPrompt);
