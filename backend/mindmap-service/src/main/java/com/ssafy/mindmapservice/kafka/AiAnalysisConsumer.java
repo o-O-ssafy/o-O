@@ -203,9 +203,13 @@ public class AiAnalysisConsumer {
                     .orElseThrow(() -> new IllegalArgumentException(
                             "Node not found: workspaceId=" + workspaceId + ", nodeId=" + nodeId));
 
-            node.setKeyword(keyword);
             node.setMemo(aiSummary);
             node.setUpdatedAt(LocalDateTime.now());
+
+            if(node.getType().equals("text")) {
+                node.setKeyword(keyword);
+            }
+
             nodeRepository.save(node);
 
         } catch (Exception e) {
