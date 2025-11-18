@@ -134,8 +134,8 @@ public class NodeController {
             @Parameter(hidden = true)
             @RequestHeader("X-USER-ID") String userId,
             @RequestBody InitialMindmapRequest request) {
-        log.info("POST /mindmap/initial - userId={}, contentType={}, startPrompt={}",
-                userId, request.contentType(), request.startPrompt());
+        log.info("POST /mindmap/initial - userId={}, contentType={}, startPrompt={}, workspaceId={}",
+                userId, request.contentType(), request.startPrompt(), request.workspaceId());
 
         InitialMindmapResponse response = nodeService.createInitialMindmap(Long.parseLong(userId), request);
 
@@ -188,13 +188,16 @@ public class NodeController {
             @RequestHeader("X-USER-ID") String userId,
             @Parameter(description = "업로드할 이미지 파일", required = true)
             @RequestParam("file") MultipartFile file,
-            @Parameter(description = "사용자 프롬프트", required = false)
-            @RequestParam(value = "startPrompt", defaultValue = "") String startPrompt) {
+            @Parameter(description = "사용자 프롬프트")
+            @RequestParam(value = "startPrompt", defaultValue = "") String startPrompt,
+            @Parameter(description = "방 번호, null 가능")
+            @RequestParam("workspaceId") Long workspaceId
+            ) {
         log.info("POST /mindmap/initial/image - userId={}, fileName={}, startPrompt={}",
                 userId, file.getOriginalFilename(), startPrompt);
 
         InitialMindmapResponse response = nodeService.createInitialMindmapWithImageFile(
-                file, Long.parseLong(userId), startPrompt);
+                file, Long.parseLong(userId), startPrompt, workspaceId);
 
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(response);
     }
@@ -536,8 +539,7 @@ public class NodeController {
         List<MindmapNode> clonedNodes = nodeService.cloneWorkspace(
                 userIdLong,
                 workspaceId,
-                request.workspaceName(),
-                request.workspaceDescription()
+                request.workspaceName()
         );
         return ResponseEntity.status(HttpStatus.CREATED).body(clonedNodes);
     }
@@ -605,7 +607,6 @@ public class NodeController {
     })
     @io.swagger.v3.oas.annotations.parameters.RequestBody(
             description = "CONTEXTUAL 분석 요청 정보 (현재는 바디를 사용하지 않음, 빈 객체 `{}`로 호출 권장)",
-            required = false,
             content = @Content(
                     mediaType = "application/json",
                     schema = @Schema(implementation = AiAnalysisRequest.class),

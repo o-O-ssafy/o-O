@@ -17,12 +17,9 @@ import com.ssafy.mindmapservice.kafka.AiAnalysisProducer;
 import com.ssafy.mindmapservice.repository.NodeRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
-import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -251,7 +248,7 @@ public class NodeService {
      * @return 생성된 워크스페이스 및 노드 정보
      */
     @Transactional
-    public InitialMindmapResponse createInitialMindmapWithImageFile(MultipartFile file, Long userId, String startPrompt) {
+    public InitialMindmapResponse createInitialMindmapWithImageFile(MultipartFile file, Long userId, String startPrompt, Long workspaceId) {
         log.info("Creating initial mindmap with image file: userId={}, fileName={}",
                 userId, file.getOriginalFilename());
 
@@ -260,7 +257,7 @@ public class NodeService {
         log.debug("Image uploaded to S3: key={}", imageKey);
 
         // 2. 기존 메서드 재사용
-        return createInitialMindmapWithImage(userId, imageKey, startPrompt);
+        return createInitialMindmapWithImage(userId, imageKey, startPrompt, workspaceId);
     }
 
 
@@ -349,7 +346,7 @@ public class NodeService {
     }
 
     @Transactional
-    public List<MindmapNode> cloneWorkspace(Long userId, Long sourceWorkspaceId, String newWorkspaceName, String newWorkspaceDescription) {
+    public List<MindmapNode> cloneWorkspace(Long userId, Long sourceWorkspaceId, String newWorkspaceName) {
         log.info("Cloning workspace: userId={}, source={}, newName={}", userId, sourceWorkspaceId, newWorkspaceName);
 
         List<MindmapNode> sourceNodes = nodeRepository.findByWorkspaceId(sourceWorkspaceId);
@@ -478,7 +475,7 @@ public class NodeService {
 
                     if (aiNode.parentId() != null) {
                         // parentId가 숫자 문자열인 경우
-                        Long realParentId = null;
+                        Long realParentId;
 
                         try {
                             // 숫자로 파싱 시도 (기존 노드 ID)
@@ -548,7 +545,6 @@ public class NodeService {
      * CONTEXTUAL AI 분석을 요청합니다.
      * 1. 노드의 분석 상태를 PENDING으로 변경
      * 2. Kafka를 통해 AI 서버로 분석 요청 전송
-     *
      * CONTEXTUAL만 사용하므로 analysisType 파라미터는 받지 않고,
      * 내부에서 "CONTEXTUAL"로 고정합니다.
      */
@@ -695,11 +691,17 @@ public class NodeService {
     public InitialMindmapResponse createInitialMindmap(Long userId, InitialMindmapRequest request) {
         log.info("Creating initial mindmap: contentType={}", request.contentType());
 
-        // 1. 워크스페이스 생성 (workspace-service 호출)
-        Long workspaceId = workspaceServiceClientAdapter.createWorkspace(
-                userId,
-                request.startPrompt()
-        );
+        // 1) workspaceId 결정 (null이면 생성, 있으면 그대로 사용)
+        Long workspaceId = request.workspaceId();
+
+        if (workspaceId == null) {
+            workspaceId = workspaceServiceClientAdapter.createWorkspace(
+                    userId,
+                    request.startPrompt()
+            );
+            log.info("Workspace not provided → created new workspaceId={}", workspaceId);
+        }
+
         log.info("Workspace created: workspaceId={}", workspaceId);
 
         String contentType = request.contentType();
@@ -755,16 +757,22 @@ public class NodeService {
      * @return 생성된 워크스페이스 및 노드 정보
      */
     @Transactional
-    public InitialMindmapResponse createInitialMindmapWithImage(Long userId, String imageUrl, String startPrompt) {
+    public InitialMindmapResponse createInitialMindmapWithImage(Long userId, String imageUrl, String startPrompt, Long workspaceId) {
         log.info("Creating initial mindmap with image: userId={}", userId);
 
-        // 1. 워크스페이스 생성
-        Long workspaceId = workspaceServiceClientAdapter.createWorkspace(userId, startPrompt);
-        log.info("Workspace created: workspaceId={}", workspaceId);
+        // 1) workspaceIdDecide 결정 (null이면 생성, 있으면 그대로 사용)
+        Long workspaceIdDecide = workspaceId;
 
+        if (workspaceIdDecide == null) {
+            workspaceIdDecide = workspaceServiceClientAdapter.createWorkspace(
+                    userId,
+                    startPrompt
+            );
+            log.info("Workspace not provided → created new workspaceIdDecide={}", workspaceIdDecide);
+        }
         // 2. 이미지 노드 생성
         MindmapNode rootNode = MindmapNode.builder()
-                .workspaceId(workspaceId)
+                .workspaceId(workspaceIdDecide)
                 .parentId(null)
                 .keyword(imageUrl)  // 이미지 URL을 keyword에 저장
                 .type("image")
@@ -775,15 +783,15 @@ public class NodeService {
                 .build();
 
         MindmapNode createdNode = createNode(rootNode);
-        log.info("Image root node created: workspaceId={}, nodeId={}", workspaceId, createdNode.getNodeId());
+        log.info("Image root node created: workspaceIdDecide={}, nodeId={}", workspaceIdDecide, createdNode.getNodeId());
 
         String requestImageUrl = imageService.generateImagePresignedUrl(imageUrl, Duration.ofHours(1));
         // 3. INITIAL AI 분석 요청
-        sendInitialAnalysisRequest(workspaceId, createdNode.getNodeId(),
+        sendInitialAnalysisRequest(workspaceIdDecide, createdNode.getNodeId(),
                 requestImageUrl, "IMAGE", startPrompt);
 
         // 4. 응답 생성
-        return buildInitialMindmapResponse(workspaceId, createdNode);
+        return buildInitialMindmapResponse(workspaceIdDecide, createdNode);
     }
 
     /**

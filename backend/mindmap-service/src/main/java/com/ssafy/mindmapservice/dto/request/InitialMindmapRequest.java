@@ -16,6 +16,9 @@ public record InitialMindmapRequest(
         String contentType,
 
         @Schema(description = "사용자 프롬프트", example = "고기랑 관련된 아이디어 없을까?")
-        String startPrompt
+        String startPrompt,
+
+        @Schema(description = "방 번호, 제외하고 보내도 됨" , example = "1")
+        Long workspaceId
 ) {
 }
