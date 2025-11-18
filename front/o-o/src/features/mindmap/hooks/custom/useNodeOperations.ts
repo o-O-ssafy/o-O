@@ -11,7 +11,8 @@ import type {
 import type { WorkspaceRole } from "@/services/dto/workspace.dto";
 import { canEditWorkspace } from "@/shared/utils/permissionUtils";
 import { useToast } from "@/shared/ui/ToastProvider";
-import { addIdeaToMindmap } from "@/services/mindmapService";
+import { addIdeaToMindmap, createInitialMindmap } from "@/services/mindmapService";
+import type { InitialMindmapRequestDTO } from "@/services/dto/mindmap.dto";
 import { calculateChildPosition } from "../../utils/parentCenteredLayout";
 import { clampNodePosition } from "../../utils/d3Utils";
 import { useLoadingStore } from "@/shared/store/loadingStore";
@@ -55,13 +56,16 @@ export function useNodeOperations(params: {
   findNonOverlappingPosition: (nodes: NodeData[], baseX: number, baseY: number) => { x: number; y: number };
   findEmptySpace: (nodes: NodeData[], preferredX: number, preferredY: number, minDistance?: number) => { x: number; y: number };
   yMap?: Y.Map<NodeData> | null;
+  isEmptyWorkspace: boolean;
 }) {
-  const { crud, nodes, cyRef, mode, workspaceId, myRole, getRandomThemeColor, findNonOverlappingPosition, findEmptySpace, yMap } = params;
+  const { crud, nodes, cyRef, mode, workspaceId, myRole, getRandomThemeColor, findNonOverlappingPosition, findEmptySpace, yMap, isEmptyWorkspace } = params;
   const { showToast } = useToast();
   const setIsLoading = useLoadingStore.getState().setIsLoading;
 
   /**
    * 텍스트박스에서 아이디어 추가
+   * - 빈 워크스페이스: /mindmap/initial API 호출 (workspaceId 포함)
+   * - 노드 있음: /mindmap/{workspaceId}/add-idea API 호출
    * - GPT 키워드 자동 추출 API 호출
    * - WebSocket을 통해 생성된 노드들이 실시간으로 전달됨
    */
@@ -84,18 +88,38 @@ export function useNodeOperations(params: {
       // 로딩 시작
       setIsLoading(true);
 
-      // GPT 키워드 추출 API 호출 (WebSocket으로 노드가 실시간 전달됨)
-      const response = await addIdeaToMindmap(workspaceId, text.trim());
+      if (isEmptyWorkspace) {
+        // 빈 워크스페이스: /mindmap/initial API 호출
+        const request: InitialMindmapRequestDTO = {
+          contentUrl: null,
+          contentType: "TEXT",
+          startPrompt: text.trim(),
+          workspaceId: parseInt(workspaceId, 10),
+        };
 
-      console.log("[handleAddNode] Idea added successfully:", {
-        createdNodeCount: response.createdNodeCount,
-        createdNodeIds: response.createdNodeIds,
-      });
+        const response = await createInitialMindmap(request);
 
-      showToast(
-        `아이디어가 추가되었습니다 (생성된 노드: ${response.createdNodeCount}개)`,
-        "success"
-      );
+        console.log("[handleAddNode] Initial mindmap created successfully:", {
+          workspaceId: response.workspaceId,
+          nodeId: response.nodeId,
+          keyword: response.keyword,
+        });
+
+        showToast("마인드맵이 생성되었습니다", "success");
+      } else {
+        // 노드가 있는 워크스페이스: /mindmap/{workspaceId}/add-idea API 호출
+        const response = await addIdeaToMindmap(workspaceId, text.trim());
+
+        console.log("[handleAddNode] Idea added successfully:", {
+          createdNodeCount: response.createdNodeCount,
+          createdNodeIds: response.createdNodeIds,
+        });
+
+        showToast(
+          `아이디어가 추가되었습니다 (생성된 노드: ${response.createdNodeCount}개)`,
+          "success"
+        );
+      }
 
       // 로딩은 useCollaborativeNodes에서 position calculation 완료 시 해제됨
     } catch (error) {
@@ -128,7 +152,7 @@ export function useNodeOperations(params: {
         showToast("아이디어 추가에 실패했습니다", "error");
       }
     }
-  }, [crud, mode, workspaceId, myRole, showToast, setIsLoading]);
+  }, [crud, mode, workspaceId, myRole, showToast, setIsLoading, isEmptyWorkspace]);
 
   /**
    * 자식 노드 생성

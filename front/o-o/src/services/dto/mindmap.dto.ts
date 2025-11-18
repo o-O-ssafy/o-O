@@ -87,6 +87,7 @@ export interface InitialMindmapRequestDTO {
   contentUrl: string | null;
   contentType: "TEXT" | "VIDEO" | "IMAGE";
   startPrompt: string | null;
+  workspaceId?: number;
 }
 
 export interface InitialMindmapResponseDTO {

@@ -175,6 +175,9 @@ const MindmapPageContent: React.FC = () => {
 
   const { nodes, isBootstrapping } = useCollaborativeNodes(collab, workspaceId);
 
+  // Check if workspace is empty (no nodes)
+  const isEmptyWorkspace = nodes.length === 0;
+
   // 🐛 DEBUG: Expose Yjs map to window for console debugging
   useEffect(() => {
     if (collab?.map) {
@@ -418,6 +421,7 @@ const MindmapPageContent: React.FC = () => {
     findNonOverlappingPosition,
     findEmptySpace,
     yMap: collab?.map ?? null,
+    isEmptyWorkspace,
   });
 
   // 8. Analyze mode hook
