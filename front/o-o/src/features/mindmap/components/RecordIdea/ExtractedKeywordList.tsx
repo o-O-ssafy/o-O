@@ -11,6 +11,7 @@ interface ExtractedKeywordListProps {
   keywords?: KeywordNode[];
   onDelete?: (nodeId: string) => void;
   onNodeClick?: (nodeId: string) => void;
+  canDelete?: boolean;
 }
 
 // 재귀적으로 트리를 렌더링하는 컴포넌트
@@ -21,6 +22,7 @@ const KeywordTreeNode = ({
   ancestorLines = [],
   onDelete,
   onNodeClick,
+  canDelete = true,
 }: {
   node: KeywordNode;
   level?: number;
@@ -28,6 +30,7 @@ const KeywordTreeNode = ({
   ancestorLines?: boolean[];
   onDelete: (nodeId: string) => void;
   onNodeClick?: (nodeId: string) => void;
+  canDelete?: boolean;
 }) => {
   const hasChildren = node.children && node.children.length > 0;
 
@@ -101,12 +104,14 @@ const KeywordTreeNode = ({
           >
             {node.label}
           </span>
-          <button
-            onClick={() => onDelete(node.id)}
-            className="flex items-center justify-center w-3 h-3 rounded-full bg-[#D16D6A] hover:bg-red-500 transition-colors"
-          >
-            <X className="w-2 h-2 text-white" strokeWidth={2.5} />
-          </button>
+          {canDelete && (
+            <button
+              onClick={() => onDelete(node.id)}
+              className="flex items-center justify-center w-3 h-3 rounded-full bg-[#D16D6A] hover:bg-red-500 transition-colors"
+            >
+              <X className="w-2 h-2 text-white" strokeWidth={2.5} />
+            </button>
+          )}
         </div>
       </div>
 
@@ -131,6 +136,7 @@ const KeywordTreeNode = ({
               ancestorLines={nextAncestorLines}
               onDelete={onDelete}
               onNodeClick={onNodeClick}
+              canDelete={canDelete}
             />
           );
         })}
@@ -138,7 +144,7 @@ const KeywordTreeNode = ({
   );
 };
 
-export function ExtractedKeywordList({ keywords = [], onDelete, onNodeClick }: ExtractedKeywordListProps = {}) {
+export function ExtractedKeywordList({ keywords = [], onDelete, onNodeClick, canDelete = true }: ExtractedKeywordListProps = {}) {
   const handleDelete = (nodeId: string) => {
     // 부모 컴포넌트에서 전달받은 onDelete가 있으면 사용
     if (onDelete) {
@@ -157,6 +163,7 @@ export function ExtractedKeywordList({ keywords = [], onDelete, onNodeClick }: E
             ancestorLines={[]}
             onDelete={handleDelete}
             onNodeClick={onNodeClick}
+            canDelete={canDelete}
           />
         ))
       ) : (

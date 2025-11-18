@@ -76,17 +76,10 @@ export const createYClient = (
   if (provider.ws) {
     const originalOnMessage = provider.ws.onmessage;
     provider.ws.onmessage = (event) => {
-      console.log("🔴 [RAW WebSocket] Message received:", {
-        data: event.data,
-        type: typeof event.data,
-        timestamp: new Date().toISOString(),
-      });
-
       // 텍스트 메시지인 경우 JSON 파싱 후 처리
       if (typeof event.data === "string") {
         try {
           const parsed = JSON.parse(event.data);
-          console.log("📨 [RAW WebSocket] Parsed JSON:", parsed);
 
           // 등록된 모든 JSON 메시지 핸들러 호출
           jsonMessageHandlers.forEach((handler) => {
@@ -101,7 +94,7 @@ export const createYClient = (
           // (Yjs는 바이너리만 처리 가능하므로 에러 방지)
           return;
         } catch (e) {
-          console.log("📨 [RAW WebSocket] Text message:", event.data);
+          // JSON 파싱 실패 시 무시
         }
       }
 
@@ -113,21 +106,21 @@ export const createYClient = (
   }
 
   // Y.Doc 업데이트 감지 (실제 WebSocket으로 데이터가 올 때)
-  doc.on("update", (update: Uint8Array, origin: any) => {
-    console.log("🔥 [WebSocket] Y.Doc Update received!", {
-      updateSize: update.length,
-      origin: origin,
-      isFromWebSocket: origin === provider,
-      timestamp: new Date().toISOString(),
-    });
+  // doc.on("update", (update: Uint8Array, origin: any) => {
+  //   console.log("🔥 [WebSocket] Y.Doc Update received!", {
+  //     updateSize: update.length,
+  //     origin: origin,
+  //     isFromWebSocket: origin === provider,
+  //     timestamp: new Date().toISOString(),
+  //   });
 
-    // WebSocket에서 온 업데이트인 경우 Y.Map 내용 확인
-    if (origin === provider) {
-      const mindmapNodes = doc.getMap("mindmap:nodes");
-      console.log("📊 [WebSocket] Current Y.Map size:", mindmapNodes.size);
-      console.log("📊 [WebSocket] All nodes in Y.Map:", mindmapNodes.toJSON());
-    }
-  });
+  //   // WebSocket에서 온 업데이트인 경우 Y.Map 내용 확인
+  //   if (origin === provider) {
+  //     const mindmapNodes = doc.getMap("mindmap:nodes");
+  //     console.log("📊 [WebSocket] Current Y.Map size:", mindmapNodes.size);
+  //     console.log("📊 [WebSocket] All nodes in Y.Map:", mindmapNodes.toJSON());
+  //   }
+  // });
 
   const connect = () => provider.connect();
   const disconnect = () => provider.disconnect();
@@ -167,9 +160,6 @@ export const createYClient = (
         // JSON 파싱 시도 (커스텀 메시지는 JSON 형태로 가정)
         try {
           const message = JSON.parse(text) as unknown;
-
-          // 디버깅: 모든 JSON 메시지 로깅
-          console.log("[yjsClient] Raw WebSocket message:", message);
 
           // WorkspaceNotification 타입 체크는 handler 내부에서 수행
           if (

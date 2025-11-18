@@ -31,3 +31,5 @@ dist-ssr
 
 # 배포 환경변수는 제외하지 않음
 !.env.production
+
+nul

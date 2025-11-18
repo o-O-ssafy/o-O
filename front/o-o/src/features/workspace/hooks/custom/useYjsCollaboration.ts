@@ -513,11 +513,27 @@ export function useYjsCollaboration(
     awareness.setLocalStateField("chat", chatData);
   }, [collab]);
 
+  // GPT 상태 업데이트 메서드
+  const updateGptState = useCallback((
+    gptData: {
+      isRecording: boolean;
+      keywords: Array<{ id: string; label: string; children?: any[] }>;
+      startedBy: string;
+      timestamp: number;
+    } | null
+  ) => {
+    if (!collab) return;
+    const awareness = collab.client.provider.awareness;
+    if (!awareness) return;
+    awareness.setLocalStateField("gpt", gptData);
+  }, [collab]);
+
   return {
     collab,
     crud,
     cursorColor,
     updateChatState,
+    updateGptState,
     connectionError,
   };
 }

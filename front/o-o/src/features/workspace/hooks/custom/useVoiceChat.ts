@@ -2,7 +2,12 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useVoiceConnection } from './useVoiceConnection';
 import { useWebRTC } from './useWebRTC';
 import { useVoiceState } from './useVoiceState';
-import type { VoiceParticipant } from '../../types/voice.types';
+import type {
+  VoiceParticipant,
+  MeetingMinutesChunkMessage,
+  MeetingMinutesDoneMessage,
+  MeetingMinutesErrorMessage,
+} from '../../types/voice.types';
 
 interface UseVoiceChatOptions {
   workspaceId: string;
@@ -11,9 +16,26 @@ interface UseVoiceChatOptions {
   onGptChunk?: (content: string) => void;
   onGptDone?: (message: { nodes: any[]; timestamp: number }) => void;
   onGptError?: (message: { error: string; rawText?: string; timestamp: number }) => void;
+  onGptRecordingStarted?: (startedBy: string, timestamp: number) => void;
+  onGptSessionEnded?: () => void;
+  onMeetingMinutesChunk?: (message: MeetingMinutesChunkMessage) => void;
+  onMeetingMinutesDone?: (message: MeetingMinutesDoneMessage) => void;
+  onMeetingMinutesError?: (message: MeetingMinutesErrorMessage) => void;
 }
 
-export function useVoiceChat({ workspaceId, userId, enabled = false, onGptChunk, onGptDone, onGptError }: UseVoiceChatOptions) {
+export function useVoiceChat({
+  workspaceId,
+  userId,
+  enabled = false,
+  onGptChunk,
+  onGptDone,
+  onGptError,
+  onGptRecordingStarted,
+  onGptSessionEnded,
+  onMeetingMinutesChunk,
+  onMeetingMinutesDone,
+  onMeetingMinutesError,
+}: UseVoiceChatOptions) {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [isInVoice, setIsInVoice] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,6 +62,11 @@ export function useVoiceChat({ workspaceId, userId, enabled = false, onGptChunk,
       onGptChunk: onGptChunk,
       onGptDone: onGptDone,
       onGptError: onGptError,
+      onGptRecordingStarted: onGptRecordingStarted,
+      onGptSessionEnded: onGptSessionEnded,
+      onMeetingMinutesChunk: onMeetingMinutesChunk,
+      onMeetingMinutesDone: onMeetingMinutesDone,
+      onMeetingMinutesError: onMeetingMinutesError,
     }
   );
 
@@ -137,12 +164,32 @@ export function useVoiceChat({ workspaceId, userId, enabled = false, onGptChunk,
     }
 
     return () => {
-      // Cleanup on unmount
-      if (isInVoice) {
-        leaveVoice();
+      // Cleanup on unmount - stop all tracks
+      console.log('[useVoiceChat] 🧹 Cleanup: Stopping local stream tracks...');
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach((track) => {
+          console.log('[useVoiceChat] 🛑 Stopping track:', track.kind, track.label);
+          track.stop();
+        });
+        localStreamRef.current = null;
       }
     };
   }, [enabled]); // Only run on mount/unmount or when enabled changes
+
+  // Request meeting minutes generation
+  const requestMeetingMinutes = useCallback(() => {
+    if (!userId) {
+      console.error('[useVoiceChat] Cannot request meeting minutes: userId is undefined');
+      return;
+    }
+
+    console.log('[useVoiceChat] 📝 Requesting meeting minutes generation...');
+
+    sendMessage({
+      type: 'generate-meeting-minutes',
+      userId,
+    });
+  }, [userId, sendMessage]);
 
   return {
     // State
@@ -164,5 +211,6 @@ export function useVoiceChat({ workspaceId, userId, enabled = false, onGptChunk,
     leaveVoice,
     toggleMute,
     sendMessage,
+    requestMeetingMinutes,
   };
 }

@@ -29,6 +29,7 @@ import { useMindmapUIState } from "../hooks/custom/useMindmapUIState";
 import { useAnalyzeMode } from "../hooks/custom/useAnalyzeMode";
 import { useDetachedSelection } from "../hooks/custom/useDetachedSelection";
 import { useMindmapSync } from "../hooks/custom/useMindmapSync";
+import { useGptAwareness } from "../../workspace/hooks/custom/useGptAwareness";
 import type { GptNodeSuggestion } from "../../workspace/types/voice.types";
 import {
   getPendingImportKeywords,
@@ -42,8 +43,10 @@ import {
 } from "@/constants/mindmapCollaboration";
 import { captureThumbnailAsFile } from "../utils/canvasCapture";
 import { mindmapApi } from "../api/mindmapApi";
+import { useAppSelector } from "@/store/hooks";
 
 const MindmapPageContent: React.FC = () => {
+  const currentUser = useAppSelector((state) => state.user.user);
   // 1. Routing & workspace params
   const params = useParams<{ workspaceId?: string }>();
   const workspaceId = params.workspaceId ?? DEFAULT_WORKSPACE_ID;
@@ -156,7 +159,7 @@ const MindmapPageContent: React.FC = () => {
   }, []);
 
   // 6. Collaboration hooks
-  const { collab, crud, updateChatState } = useYjsCollaboration(
+  const { collab, crud, updateChatState, updateGptState } = useYjsCollaboration(
     wsUrl,
     workspaceId,
     cursorColorRef.current,
@@ -195,10 +198,30 @@ const MindmapPageContent: React.FC = () => {
     setVoiceChatVisible,
   } = useMindmapUIState();
 
-  // 6a. GPT state for RecordIdeaDialog
-  const [isGptRecording, setIsGptRecording] = useState(false);
-  const [gptKeywords, setGptKeywords] = useState<{ id: string; label: string; children?: any[] }[]>([]);
+  // 6a. GPT state from Awareness (실시간 동기화)
+  const gptState = useGptAwareness(collab?.client.provider.awareness);
+  const isGptRecording = gptState?.isRecording ?? false;
+  const gptKeywords = gptState?.keywords ?? [];
   const gptToggleRef = React.useRef<(() => void) | null>(null);
+
+  // 6b. 로컬 패널 표시 상태 (non-MAINTAINER용)
+  const [showGptPanel, setShowGptPanel] = useState(true);
+
+  // Ref to access latest gptState without triggering callback recreation
+  const gptStateRef = React.useRef(gptState);
+  React.useEffect(() => {
+    gptStateRef.current = gptState;
+  }, [gptState]);
+
+  // 녹음 시작 시 또는 키워드가 있을 때 패널 표시
+  useEffect(() => {
+    if (isGptRecording) {
+      setShowGptPanel(true);
+    } else if (gptKeywords.length > 0) {
+      // 녹음은 끝났지만 키워드가 있으면 패널 유지
+      setShowGptPanel(true);
+    }
+  }, [isGptRecording, gptKeywords.length]);
 
   // GPT 노드를 트리 구조로 변환
   const convertGptNodesToKeywords = (gptNodes: GptNodeSuggestion[], createdNodeIds: string[]) => {
@@ -209,76 +232,179 @@ const MindmapPageContent: React.FC = () => {
     }));
   };
 
-  // GPT 녹음 상태 변경 핸들러
-  const handleGptRecordingChange = (isRecording: boolean) => {
-    setIsGptRecording(isRecording);
-    if (!isRecording) {
-      // 녹음 종료 시 키워드 초기화는 하지 않음 (결과가 올 때까지 대기)
-    }
-  };
+  // GPT 녹음 상태 변경 핸들러 (Awareness 동기화는 VoiceChat에서 처리) - useCallback으로 memoization
+  const handleGptRecordingChange = useCallback((isRecording: boolean) => {
+    // Awareness에서 상태를 가져오므로 로컬 state 업데이트 불필요
+    console.log('[MindmapPage] GPT 녹음 상태 변경:', isRecording);
+  }, []);
 
   // GPT 토글 핸들러 (RecordIdeaDialog의 재생/일시정지 버튼용)
   const handleToggleGptRecording = () => {
     gptToggleRef.current?.();
   };
 
-  // GPT 노드 수신 핸들러
-  const handleGptNodesReceived = (nodes: GptNodeSuggestion[], createdNodeIds: string[]) => {
-    const keywords = convertGptNodesToKeywords(nodes, createdNodeIds);
-    setGptKeywords(prev => [...prev, ...keywords]);
-  };
+  // GPT 노드 수신 핸들러 (Awareness에 키워드 추가) - useCallback으로 memoization
+  const handleGptNodesReceived = useCallback((nodes: GptNodeSuggestion[], createdNodeIds: string[]) => {
+    console.log('[MindmapPage] GPT 노드 수신:', {
+      nodesCount: nodes.length,
+      createdNodeIds,
+      myRole,
+      isMaintainer: myRole === 'MAINTAINER',
+    });
+
+    // MAINTAINER만 Awareness 업데이트 (다른 사용자는 Awareness 구독으로 자동 동기화)
+    if (myRole !== 'MAINTAINER') {
+      console.log('[MindmapPage] ℹ️ 다른 역할 → Awareness 업데이트 스킵 (MAINTAINER가 업데이트함)');
+      return;
+    }
+
+    // createdNodeIds가 비어있으면 실제로 노드가 생성되지 않은 것
+    if (createdNodeIds.length === 0) {
+      console.warn('[MindmapPage] ⚠️ MAINTAINER인데 createdNodeIds가 비어있음 - 노드 생성 실패?');
+      return;
+    }
+
+    const newKeywords = convertGptNodesToKeywords(nodes, createdNodeIds);
+
+    // Awareness 업데이트 (모든 참여자에게 동기화) - null-safe 처리
+    // Use ref to avoid recreating this callback when gptState changes
+    if (updateGptState && gptStateRef.current) {
+      console.log('[MindmapPage] 📡 MAINTAINER가 Awareness에 키워드 추가:', {
+        existingKeywords: gptStateRef.current.keywords?.length || 0,
+        newKeywords: newKeywords.length,
+        totalAfterUpdate: (gptStateRef.current.keywords?.length || 0) + newKeywords.length,
+      });
+      updateGptState({
+        ...gptStateRef.current, // ref로 접근 (기존 상태 유지)
+        keywords: [...(gptStateRef.current.keywords ?? []), ...newKeywords], // 키워드만 추가
+      });
+    }
+  }, [updateGptState, myRole]);
 
   // 키워드 클릭 핸들러 - 해당 노드로 화면 이동
   const handleKeywordClick = (nodeId: string) => {
-    // GPT 노드는 임시 ID를 사용하므로, nodes 배열에서 찾기
-    const targetNode = nodes.find(node => node.id === nodeId);
-
-    if (targetNode && canvasContainerRef.current) {
-      const svgElement = canvasContainerRef.current.querySelector('svg');
-      if (svgElement) {
-        // D3 zoom을 사용하여 노드 위치로 이동
-        const zoom = (svgElement as any).__zoom;
-        if (zoom) {
-          const containerRect = canvasContainerRef.current.getBoundingClientRect();
-          const centerX = containerRect.width / 2;
-          const centerY = containerRect.height / 2;
-
-          // 노드를 화면 중앙으로 이동
-          const transform = d3.zoomIdentity
-            .translate(centerX, centerY)
-            .scale(1)
-            .translate(-targetNode.x, -targetNode.y);
-
-          d3.select(svgElement)
-            .transition()
-            .duration(500)
-            .call((zoom as any).transform, transform);
-        }
-      }
-    }
+    // focusNodeId 설정하여 기존 포커스 로직 사용
+    setFocusNodeId(nodeId);
+    // 노드 선택
+    setSelectedNodeId(nodeId);
   };
 
-  // 키워드 삭제 핸들러 - UI와 실제 노드 모두 삭제
+  // 키워드 삭제 핸들러 - Awareness + 실제 노드 삭제
   const handleDeleteKeyword = (nodeId: string) => {
-    // UI에서 키워드 제거
-    const removeNodeById = (nodes: typeof gptKeywords): typeof gptKeywords => {
-      return nodes.filter((node) => {
-        if (node.id === nodeId) {
-          return false;
-        }
-        if (node.children) {
-          node.children = removeNodeById(node.children);
-        }
-        return true;
-      });
-    };
-    setGptKeywords(removeNodeById(gptKeywords));
+    console.log('[MindmapPage] 키워드 삭제:', nodeId);
 
-    // 실제 노드도 삭제
+    // 실제 노드 삭제 (Yjs CRDT로 자동 동기화)
     if (crud) {
       crud.remove(nodeId);
     }
+
+    // Awareness에서 키워드 제거 (모든 참여자에게 동기화)
+    if (updateGptState && gptState) {
+      const removeNodeById = (nodes: typeof gptKeywords): typeof gptKeywords => {
+        return nodes.filter((node) => {
+          if (node.id === nodeId) {
+            return false;
+          }
+          if (node.children) {
+            node.children = removeNodeById(node.children);
+          }
+          return true;
+        });
+      };
+
+      const filteredKeywords = removeNodeById(gptState.keywords);
+
+      console.log('[MindmapPage] 📡 Awareness에서 키워드 제거');
+      updateGptState({
+        ...gptState,
+        keywords: filteredKeywords,
+        timestamp: Date.now(),
+      });
+    }
   };
+
+  // GPT 노드 서버 저장 핸들러 (MAINTAINER만 실행)
+  const handleSubmitGptNodes = useCallback(async () => {
+    if (!gptState?.keywords || gptState.keywords.length === 0) {
+      console.log('[MindmapPage] 저장할 GPT 키워드가 없습니다.');
+      return;
+    }
+
+    if (!collab) {
+      console.error('[MindmapPage] collab이 초기화되지 않았습니다.');
+      return;
+    }
+
+    console.log('[MindmapPage] 🚀 GPT 노드 서버 저장 시작:', gptState.keywords.length, '개');
+
+    try {
+      // 1. keywords에서 nodeId가 없는 노드들 필터링 (아직 서버에 없는 노드)
+      const nodesToSave = gptState.keywords
+        .map(kw => nodes.find(n => n.id === kw.id))
+        .filter(node => node && !node.nodeId);
+
+      console.log('[MindmapPage] 📝 서버에 저장할 노드:', nodesToSave.length, '개');
+
+      // 2. 각 노드를 서버에 POST
+      for (const node of nodesToSave) {
+        if (!node) continue;
+
+        // parentId 변환 (string ID → backend nodeId)
+        let backendParentId: number | null = null;
+        if (node.parentId && node.parentId !== '0') {
+          const parentNode = nodes.find(n => n.id === node.parentId);
+          backendParentId = (parentNode?.nodeId as number) || null;
+        }
+
+        console.log('[MindmapPage] 💾 노드 저장 중:', {
+          id: node.id,
+          keyword: node.keyword,
+          parentId: backendParentId,
+        });
+
+        // createMindmapNode API 호출
+        const createdNode = await createMindmapNode(workspaceId, {
+          parentId: backendParentId,
+          type: node.type,
+          keyword: node.keyword,
+          memo: node.memo || '',
+          x: node.x || 0,
+          y: node.y || 0,
+          color: node.color,
+          contentUrl: null,
+        });
+
+        console.log('[MindmapPage] ✅ 노드 저장 완료:', {
+          id: node.id,
+          nodeId: createdNode.nodeId,
+        });
+
+        // 3. Yjs map 업데이트 (nodeId 할당)
+        collab.client.doc.transact(() => {
+          const current = collab.map.get(node.id);
+          if (current) {
+            collab.map.set(node.id, {
+              ...current,
+              nodeId: createdNode.nodeId,
+            });
+          }
+        }, 'remote'); // origin='remote'로 useMindmapSync 재트리거 방지
+      }
+
+      console.log('[MindmapPage] ✨ 모든 GPT 노드 저장 완료');
+
+      // 4. Awareness 초기화 (GPT 상태 제거)
+      if (updateGptState) {
+        updateGptState(null);
+      }
+
+      // 5. 패널 닫기
+      setShowGptPanel(false);
+    } catch (error) {
+      console.error('[MindmapPage] ❌ GPT 노드 저장 실패:', error);
+      // TODO: 에러 토스트 표시
+    }
+  }, [gptState, nodes, collab, workspaceId, updateGptState]);
 
   // 7. Node operations hook
   const nodeOperations = useNodeOperations({
@@ -545,13 +671,26 @@ const MindmapPageContent: React.FC = () => {
     const interval = setInterval(() => {
       if (transformRef.current) {
         const currentTransform = transformRef.current.current;
-        setTransform({ ...currentTransform });
+        // Only update if values actually changed
+        setTransform(prev => {
+          if (prev.x === currentTransform.x &&
+              prev.y === currentTransform.y &&
+              prev.scale === currentTransform.scale) {
+            return prev; // No change, return same object
+          }
+          return { ...currentTransform };
+        });
       }
 
       if (containerRef.current) {
-        setContainerSize({
-          width: containerRef.current.clientWidth,
-          height: containerRef.current.clientHeight,
+        const newWidth = containerRef.current.clientWidth;
+        const newHeight = containerRef.current.clientHeight;
+        // Only update if values actually changed
+        setContainerSize(prev => {
+          if (prev.width === newWidth && prev.height === newHeight) {
+            return prev; // No change, return same object
+          }
+          return { width: newWidth, height: newHeight };
         });
       }
     }, 16); // ~60fps
@@ -640,7 +779,13 @@ const MindmapPageContent: React.FC = () => {
         {!voiceChatVisible && (
           <div className="fixed top-1 right-1 md:top-4 md:right-4 z-50">
             <StatusBox
-              onStartVoiceChat={() => setVoiceChatVisible(true)}
+              onStartVoiceChat={() => {
+                // 분석모드에서 음성채팅 시작 시 편집모드로 자동 전환
+                if (mode === "analyze") {
+                  handleModeChange("edit");
+                }
+                setVoiceChatVisible(true);
+              }}
               workspaceId={workspaceId}
               yclient={collab?.client}
             />
@@ -661,6 +806,8 @@ const MindmapPageContent: React.FC = () => {
               onGptToggleReady={(toggle) => { gptToggleRef.current = toggle; }}
               yclient={collab?.client}
               cursorColor={cursorColorRef.current ?? undefined}
+              gptState={gptState}
+              updateGptState={updateGptState}
             />
           </div>
         ) : (
@@ -676,14 +823,25 @@ const MindmapPageContent: React.FC = () => {
         )}
 
         {/* GPT Recording - RecordIdeaDialog */}
-        {(isGptRecording || gptKeywords.length > 0) && (
+        {showGptPanel && (isGptRecording || gptKeywords.length > 0) && (
           <div className="fixed top-24 right-4 z-40">
             <RecordIdeaDialog
               keywords={gptKeywords}
-              onDelete={handleDeleteKeyword}
+              onDelete={canEdit ? handleDeleteKeyword : undefined}
               onNodeClick={handleKeywordClick}
-              isRecording={isGptRecording}
-              onToggleRecording={handleToggleGptRecording}
+              myRole={myRole}
+              onClose={() => {
+                // MAINTAINER: Awareness 상태 클리어 (모든 참여자에게 영향)
+                // non-MAINTAINER: 로컬 패널만 숨김
+                if (myRole === 'MAINTAINER') {
+                  if (updateGptState) {
+                    updateGptState(null);
+                  }
+                } else {
+                  setShowGptPanel(false);
+                }
+              }}
+              onSubmit={handleSubmitGptNodes}
             />
           </div>
         )}

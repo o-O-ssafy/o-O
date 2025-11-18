@@ -116,6 +116,25 @@ export interface GptSessionEndedMessage {
   timestamp: number;
 }
 
+// 회의록 관련 메시지 (Server → Client)
+export interface MeetingMinutesChunkMessage {
+  type: 'meeting-minutes-chunk';
+  content: string;
+  timestamp: number;
+}
+
+export interface MeetingMinutesDoneMessage {
+  type: 'meeting-minutes-done';
+  content: string;
+  timestamp: number;
+}
+
+export interface MeetingMinutesErrorMessage {
+  type: 'meeting-minutes-error';
+  error: string;
+  timestamp: number;
+}
+
 export type ServerMessage =
   | ParticipantsMessage
   | VoiceJoinedMessage
@@ -131,7 +150,10 @@ export type ServerMessage =
   | GptChunkMessage
   | GptDoneMessage
   | GptErrorMessage
-  | GptSessionEndedMessage;
+  | GptSessionEndedMessage
+  | MeetingMinutesChunkMessage
+  | MeetingMinutesDoneMessage
+  | MeetingMinutesErrorMessage;
 
 // Client → Server Messages
 export interface SendOfferMessage {
@@ -177,6 +199,20 @@ export interface GptStopRecordingMessage {
   userId: string;
 }
 
+// 회의록 관련 메시지 (Client → Server)
+export interface VoiceTranscriptMessage {
+  type: 'voice-transcript';
+  userId: string;
+  userName: string;
+  text: string;
+  timestamp: number;
+}
+
+export interface GenerateMeetingMinutesMessage {
+  type: 'generate-meeting-minutes';
+  userId: string;
+}
+
 export type ClientMessage =
   | SendOfferMessage
   | SendAnswerMessage
@@ -184,4 +220,6 @@ export type ClientMessage =
   | SendVoiceStateMessage
   | GptStartRecordingMessage
   | GptTranscriptMessage
-  | GptStopRecordingMessage;
+  | GptStopRecordingMessage
+  | VoiceTranscriptMessage
+  | GenerateMeetingMinutesMessage;
