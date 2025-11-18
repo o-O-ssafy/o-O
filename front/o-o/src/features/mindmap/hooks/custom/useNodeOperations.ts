@@ -14,6 +14,7 @@ import { useToast } from "@/shared/ui/ToastProvider";
 import { addIdeaToMindmap } from "@/services/mindmapService";
 import { calculateChildPosition } from "../../utils/parentCenteredLayout";
 import { clampNodePosition } from "../../utils/d3Utils";
+import { useLoadingStore } from "@/shared/store/loadingStore";
 
 /**
  * 노드 CRUD 작업 핸들러를 제공하는 커스텀 훅
@@ -57,6 +58,7 @@ export function useNodeOperations(params: {
 }) {
   const { crud, nodes, cyRef, mode, workspaceId, myRole, getRandomThemeColor, findNonOverlappingPosition, findEmptySpace, yMap } = params;
   const { showToast } = useToast();
+  const setIsLoading = useLoadingStore.getState().setIsLoading;
 
   /**
    * 텍스트박스에서 아이디어 추가
@@ -79,6 +81,9 @@ export function useNodeOperations(params: {
     }
 
     try {
+      // 로딩 시작
+      setIsLoading(true);
+
       // GPT 키워드 추출 API 호출 (WebSocket으로 노드가 실시간 전달됨)
       const response = await addIdeaToMindmap(workspaceId, text.trim());
 
@@ -91,8 +96,13 @@ export function useNodeOperations(params: {
         `아이디어가 추가되었습니다 (생성된 노드: ${response.createdNodeCount}개)`,
         "success"
       );
+
+      // 로딩은 useCollaborativeNodes에서 position calculation 완료 시 해제됨
     } catch (error) {
       console.error("[handleAddNode] Failed to add idea:", error);
+
+      // 로딩 해제
+      setIsLoading(false);
 
       // 에러 타입별 메시지 처리
       if (error && typeof error === 'object') {
@@ -118,7 +128,7 @@ export function useNodeOperations(params: {
         showToast("아이디어 추가에 실패했습니다", "error");
       }
     }
-  }, [crud, mode, workspaceId, myRole, showToast]);
+  }, [crud, mode, workspaceId, myRole, showToast, setIsLoading]);
 
   /**
    * 자식 노드 생성

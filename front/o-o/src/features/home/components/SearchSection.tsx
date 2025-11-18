@@ -13,6 +13,7 @@ import {
   useCreateInitialMindmapFromImageMutation,
 } from "@/features/mindmap/hooks/mutation/useCreateInitialMindmapMutation";
 import type { InitialMindmapRequestDTO } from "@/services/dto/mindmap.dto";
+import { useLoadingStore } from "@/shared/store/loadingStore";
 
 interface SearchSectionProps {
   readonly keywords?: TrendKeywordItem[];
@@ -31,6 +32,7 @@ export function SearchSection({
   const navigate = useNavigate();
 
   const isLoggedIn = useAppSelector((state) => state.auth.isLoggedIn);
+  const setIsLoading = useLoadingStore((state) => state.setIsLoading);
 
   const {
     mediaData,
@@ -74,6 +76,9 @@ export function SearchSection({
     }
 
     try {
+      // 로딩 시작 (navigate 후에도 유지됨)
+      setIsLoading(true);
+
       let response;
 
       // 이미지 파일이 있는 경우
@@ -92,10 +97,11 @@ export function SearchSection({
         response = await createInitialMindmap(request);
       }
 
-      // 성공 시 마인드맵 페이지로 이동
+      // 성공 시 마인드맵 페이지로 이동 (로딩은 MindmapPage에서 해제됨)
       navigate(`/mindmap/${response.workspaceId}`);
     } catch (error) {
       console.error("마인드맵 생성 실패:", error);
+      setIsLoading(false); // 에러 시 로딩 해제
       // TODO: 에러 처리 (토스트 메시지 등)
     }
   };

@@ -7,6 +7,7 @@ import {
 import { useYMapState } from "./useYMapState";
 import type { NodeData } from "../../../mindmap/types";
 import type { YClient } from "./yjsClient";
+import { useLoadingStore } from "@/shared/store/loadingStore";
 
 /**
  * x, y가 null인 노드들에게 자동으로 위치를 할당
@@ -299,6 +300,17 @@ export function useCollaborativeNodes(
           try {
             await batchUpdateNodePositions(workspaceId, updatedNodesForServer);
             console.log("[useCollaborativeNodes] ✅ Position calculation complete, saved", updatedNodesForServer.length, "nodes");
+
+            // Textbox 아이디어 추가 로딩 해제 (triple rAF로 완전한 렌더링 완료 후 실행)
+            // Y.Map 업데이트 → React re-render → DOM paint → NodeOverlay mount 완료 대기
+            requestAnimationFrame(() => {
+              requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                  useLoadingStore.getState().setIsLoading(false);
+                  console.log("🎉 Position calculation done - loading cleared after render");
+                });
+              });
+            });
           } catch (error) {
             console.error(
               `[useCollaborativeNodes] 🔧 Failed to save position updates:`,

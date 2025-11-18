@@ -229,6 +229,7 @@ export interface ContentDialogProps {
   content: string;
   className?: string;
   isOpen?: boolean;
+  isLoading?: boolean;
   onClose?: () => void;
 }
 

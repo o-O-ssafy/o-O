@@ -15,6 +15,7 @@ import {
   isInitialCreateDoneNotification,
   isRoleUpdateNotification,
 } from "../../types/websocket.types";
+import { useLoadingStore } from "@/shared/store/loadingStore";
 
 type UseYjsCollaborationOptions = {
   /** 이 훅을 활성화할지 여부 (페이지에 따라 on/off 가능) */
@@ -55,6 +56,7 @@ export function useYjsCollaboration(
   const [connectionError, setConnectionError] = useState<boolean>(false);
   const currentUser = useAppSelector((state) => state.user.user);
   const queryClient = useQueryClient();
+  const setIsLoading = useLoadingStore.getState().setIsLoading;
 
   // refs
   const currentClientRef = useRef<YClient | null>(null);
@@ -240,6 +242,8 @@ export function useYjsCollaboration(
           );
         } finally {
           isHydratingInitialNodes = false;
+          setIsLoading(false);
+          console.log("🎉 Initial create done (REST path) - loading cleared");
         }
       };
 
@@ -356,6 +360,14 @@ export function useYjsCollaboration(
             }, "remote");
 
             console.log(`✅ ${data.type} nodes synced to Y.Map`);
+
+            // initial-create-done인 경우 로딩 해제
+            if (data.type === "initial-create-done") {
+              setIsLoading(false);
+              console.log("🎉 Initial create done - loading cleared");
+            }
+            // add-idea-done인 경우: 로딩 해제는 position calculation 완료 후 (useCollaborativeNodes에서 처리)
+            // 노드들이 0,0에 모였다가 → calculate position → 진짜 position 렌더링 → 로딩 해제
           }
           // AI + 트렌드 통합 추천 결과
           else if (data.type === "ai_suggestion" && data.targetNodeId) {

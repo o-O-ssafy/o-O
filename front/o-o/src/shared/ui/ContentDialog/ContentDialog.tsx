@@ -3,6 +3,9 @@ import React from "react";
 import type { ContentDialogProps } from "../../../features/mindmap/types";
 import DialogHeader from "./DialogHeader";
 import DialogContent from "./DialogContent";
+import DialogLoadingOverlay from "../DialogLoadingOverlay";
+
+export const DIALOG_BG_COLOR = "#DCDFE5";
 
 const ContentDialog: React.FC<ContentDialogProps> = ({
   characterImage,
@@ -11,6 +14,7 @@ const ContentDialog: React.FC<ContentDialogProps> = ({
   content,
   className = "",
   isOpen = true,
+  isLoading = false,
   onClose,
 }) => {
   if (!isOpen) return null;
@@ -31,13 +35,14 @@ const ContentDialog: React.FC<ContentDialogProps> = ({
         <div
           className={`bg-[#DCDFE5] rounded-xl lg:rounded-2xl shadow-2xl h-full ${className}`}
         >
-          <div className="p-4 sm:p-6 lg:p-10 h-full flex flex-col">
+          <div className="p-4 sm:p-6 lg:p-10 h-full flex flex-col relative">
             <DialogHeader
               characterImage={characterImage}
               title={title}
               buttons={buttons}
             />
             <DialogContent content={content} />
+            {isLoading && <DialogLoadingOverlay bgColor={DIALOG_BG_COLOR} />}
           </div>
         </div>
       </div>

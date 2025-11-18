@@ -1,6 +1,6 @@
 ﻿import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Lightbulb, Loader2 } from "lucide-react";
+import { Lightbulb } from "lucide-react";
 import ContentDialog from "../../../shared/ui/ContentDialog/ContentDialog";
 import analyzePopoImage from "@/shared/assets/images/analyze_popo.webp";
 import planningPopoImage from "@/shared/assets/images/planning_popo.webp";
@@ -27,7 +27,8 @@ export default function AnalyzeSelectionPanel({
   const hasSelection = selectedNodes.length > 0;
   const [analysisDialogOpen, setAnalysisDialogOpen] = useState(false);
   const [planDialogOpen, setPlanDialogOpen] = useState(false);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isAnalysisLoading, setIsAnalysisLoading] = useState(false);
+  const [isPlanLoading, setIsPlanLoading] = useState(false);
   const [apiAnalysisResult, setApiAnalysisResult] = useState<string | null>(
     null
   );
@@ -57,7 +58,9 @@ export default function AnalyzeSelectionPanel({
   const handleAnalyzeClick = async () => {
     if (!hasSelection) return;
 
-    setIsAnalyzing(true);
+    // 다이얼로그 먼저 열기
+    setAnalysisDialogOpen(true);
+    setIsAnalysisLoading(true);
 
     try {
       // NodeData에서 nodeId 추출
@@ -69,12 +72,11 @@ export default function AnalyzeSelectionPanel({
         throw new Error("분석할 노드의 ID를 찾을 수 없습니다.");
       }
 
-      // API 호출
+      // API 호출 (다이얼로그와 동시에)
       const result = await analyzeSelectedNodes(workspaceId, nodeIds);
 
       // 결과 저장
       setApiAnalysisResult(result.analysis);
-      setAnalysisDialogOpen(true);
 
       // 성공 토스트
       showToast("분석이 완료되었습니다!", "success");
@@ -84,31 +86,38 @@ export default function AnalyzeSelectionPanel({
     } catch (error) {
       console.error("[AnalyzeSelectionPanel] 분석 실패:", error);
       showToast("분석에 실패했습니다. 다시 시도해주세요.", "error");
+      setAnalysisDialogOpen(false);
     } finally {
-      setIsAnalyzing(false);
+      setIsAnalysisLoading(false);
     }
   };
 
   const handlePlanOpen = async () => {
     setAnalysisDialogOpen(false);
 
-    try {
-      // 분석 결과가 없으면 기획안을 생성할 수 없음
-      if (!apiAnalysisResult) {
-        showToast("분석 결과가 없습니다. 먼저 분석을 실행해주세요.", "error");
-        return;
-      }
+    // 분석 결과가 없으면 기획안을 생성할 수 없음
+    if (!apiAnalysisResult) {
+      showToast("분석 결과가 없습니다. 먼저 분석을 실행해주세요.", "error");
+      return;
+    }
 
+    // 기획안 다이얼로그 먼저 열기
+    setPlanDialogOpen(true);
+    setIsPlanLoading(true);
+
+    try {
       const result = await createPlan(
         workspaceId,
         apiAnalysisResult,
         "AI 기반 마인드맵 서비스 기획안"
       );
       setApiPlan(result.plan);
-      setPlanDialogOpen(true);
     } catch (error) {
       console.error("[AnalyzeSelectionPanel] 기획안 생성 실패:", error);
       showToast("기획안 생성에 실패했습니다.", "error");
+      setPlanDialogOpen(false);
+    } finally {
+      setIsPlanLoading(false);
     }
   };
 
@@ -169,16 +178,9 @@ export default function AnalyzeSelectionPanel({
         <Button
           onClick={handleAnalyzeClick}
           className="mt-4 w-full"
-          disabled={!hasSelection || isAnalyzing}
+          disabled={!hasSelection}
         >
-          {isAnalyzing ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              분석 중...
-            </>
-          ) : (
-            "분석하기"
-          )}
+          분석하기
         </Button>
       </div>
 
@@ -187,6 +189,7 @@ export default function AnalyzeSelectionPanel({
           characterImage={analyzePopoImage}
           title="AI 분석 내용"
           content={dialogContent}
+          isLoading={isAnalysisLoading}
           onClose={() => setAnalysisDialogOpen(false)}
           buttons={[
             {
@@ -198,7 +201,7 @@ export default function AnalyzeSelectionPanel({
             {
               id: "plan",
               text: "기획안 작성하기",
-              onClick: handlePlanOpen,
+              onClick: () => void handlePlanOpen(),
             },
           ]}
         />
@@ -209,6 +212,7 @@ export default function AnalyzeSelectionPanel({
           characterImage={planningPopoImage}
           title="AI 기반 마인드맵 서비스 기획안"
           content={apiPlan || planContent}
+          isLoading={isPlanLoading}
           onClose={() => setPlanDialogOpen(false)}
           buttons={[
             {

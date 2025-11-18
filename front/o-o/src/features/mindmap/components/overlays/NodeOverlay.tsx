@@ -640,5 +640,6 @@ export default memo(
     prev.isAnalyzeSelected === next.isAnalyzeSelected &&
     prev.detachedSelection?.id === next.detachedSelection?.id &&
     prev.aiRecommendations === next.aiRecommendations &&
-    prev.trendRecommendations === next.trendRecommendations
+    prev.trendRecommendations === next.trendRecommendations &&
+    prev.isLoadingRecommendation === next.isLoadingRecommendation
 );
