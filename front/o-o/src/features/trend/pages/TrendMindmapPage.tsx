@@ -3,6 +3,7 @@ import { useEffect, useState, useMemo } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import type { RootState } from "@/store/store";
 import { addToPath } from "@/store/slices/trendPathSlice";
+import { useAppSelector } from "@/store/hooks";
 import { useTrend } from "../hooks/useTrend";
 import { useMypage } from "@/features/mypage/hooks/useMypage";
 import { useCreateWorkspaceMutation } from "@/features/workspace/hooks/mutation/useCreateWorkspaceMutation";
@@ -34,6 +35,9 @@ export function TrendMindmapPage() {
     (state: RootState) => state.trendPath.visitPath
   );
 
+  // 로그인 상태 확인
+  const { isLoggedIn } = useAppSelector((state) => state.auth);
+
   // Workspace를 Project 타입으로 변환
   const projects: Project[] = useMemo(() => {
     return workspaces.map((workspace) => ({
@@ -54,12 +58,12 @@ export function TrendMindmapPage() {
     }));
   }, [workspaces]);
 
-  // 워크스페이스 데이터 가져오기 (최초 1회만)
+  // 워크스페이스 데이터 가져오기 (회원인 경우에만)
   useEffect(() => {
-    if (workspaces.length === 0) {
+    if (isLoggedIn && workspaces.length === 0) {
       fetchWorkspacesList({ category: "recent" });
     }
-  }, []);
+  }, [isLoggedIn]);
 
   useEffect(() => {
     if (trendId) {

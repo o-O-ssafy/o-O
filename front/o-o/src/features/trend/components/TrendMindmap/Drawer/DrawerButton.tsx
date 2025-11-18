@@ -3,6 +3,7 @@ import { useSelector, useDispatch } from "react-redux";
 import { useNavigate, useParams } from "react-router-dom";
 import type { RootState } from "@/store/store";
 import { resetPathExceptParent } from "@/store/slices/trendPathSlice";
+import { useAppSelector } from "@/store/hooks";
 import { Drawer, DrawerContent, DrawerTrigger } from "@/components/ui/drawer";
 import CustomScrollbar from "@/shared/ui/CustomScrollbar";
 import { useDrawerDimensions } from "../../../hooks/custom/useDrawerDimensions";
@@ -31,8 +32,18 @@ export function DrawerButton({ onOpenModal }: DrawerButtonProps) {
     (state: RootState) => state.trendPath.visitPath
   );
 
+  // 로그인 상태 확인
+  const { isLoggedIn } = useAppSelector((state) => state.auth);
+
   const handleImportToMindmap = () => {
     console.log("handleImportToMindmap 호출됨!");
+
+    // 비회원이면 로그인 안내
+    if (!isLoggedIn) {
+      alert("로그인이 필요한 기능입니다. 로그인 후 이용해주세요.");
+      return;
+    }
+
     onOpenModal();
   };
 

@@ -10,6 +10,11 @@ import type { YClient } from "./yjsClient";
 
 /**
  * x, y가 null인 노드들에게 자동으로 위치를 할당
+ *
+ * 레이아웃 전략:
+ * - 소규모 업데이트 (null 노드 <= 5개): parentCenteredLayout 사용 (부모 근처에 조밀하게 배치)
+ * - 대규모 업데이트 (null 노드 > 5개): radialLayout 사용 (전체 트리 구조 재배치)
+ *
  * - 방사형(radial) 레이아웃: 루트 중심, depth별 동심원 배치
  * - 부모-자식 근접 배치 (각도 기반)
  * - D3 force simulation으로 노드 겹침 방지 및 edge crossing 최소화
@@ -25,14 +30,29 @@ async function calculateNodePositions(nodes: NodeData[]): Promise<NodeData[]> {
     return nodes;
   }
 
-  // 방사형 레이아웃 + Force Simulation 적용
+  const CANVAS_CENTER_X = 2500;
+  const CANVAS_CENTER_Y = 2500;
+
+  // 조건: null 좌표 노드가 5개 이하면 parentCenteredLayout 사용
+  if (nullPositionNodes.length <= 5) {
+    console.log(`[calculateNodePositions] Using parentCenteredLayout for ${nullPositionNodes.length} new nodes`);
+
+    const { calculateParentCenteredPositions } = await import(
+      "../../../mindmap/utils/parentCenteredLayout"
+    );
+
+    const processedNodes = await calculateParentCenteredPositions(nodes);
+    return processedNodes;
+  }
+
+  // 대규모 업데이트: radialLayout + Force Simulation 사용
+  console.log(`[calculateNodePositions] Using radialLayoutWithForces for ${nullPositionNodes.length} new nodes`);
+
   const { applyRadialLayoutWithForcesToNodes } = await import(
     "../../../mindmap/utils/radialLayoutWithForces"
   );
 
-  const CANVAS_CENTER_X = 2500;
-  const CANVAS_CENTER_Y = 2500;
-  const BASE_RADIUS = 350; // depth당 기본 반경
+  const BASE_RADIUS = 200; // depth당 기본 반경 (350 → 200으로 축소)
 
   // parentId를 string으로 변환 (radialLayoutWithForces 타입 요구사항)
   const nodesWithStringParentId = nodes.map((node) => ({

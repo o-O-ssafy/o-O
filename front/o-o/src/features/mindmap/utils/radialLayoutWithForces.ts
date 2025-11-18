@@ -128,7 +128,7 @@ export async function calculateRadialLayoutWithForces(
   nodes: Array<{ id: string; parentId: string | null | undefined }>,
   centerX: number = CANVAS_CENTER_X,
   centerY: number = CANVAS_CENTER_Y,
-  baseRadius: number = 350
+  baseRadius: number = 200
 ): Promise<PositionedNode[]> {
   if (nodes.length === 0) return [];
 
