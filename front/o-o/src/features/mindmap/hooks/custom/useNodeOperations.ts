@@ -13,6 +13,7 @@ import { canEditWorkspace } from "@/shared/utils/permissionUtils";
 import { useToast } from "@/shared/ui/ToastProvider";
 import { addIdeaToMindmap } from "@/services/mindmapService";
 import { calculateChildPosition } from "../../utils/parentCenteredLayout";
+import { clampNodePosition } from "../../utils/d3Utils";
 
 /**
  * 노드 CRUD 작업 핸들러를 제공하는 커스텀 훅
@@ -320,6 +321,7 @@ export function useNodeOperations(params: {
   /**
    * 다수 노드 위치 일괄 변경
    * - Layout 재배치 후 호출
+   * - 위치를 캔버스 경계 내로 제한 (100px 마진 적용)
    */
   const handleBatchNodePositionChange = useCallback(
     (positions: Array<{ id: string; x: number; y: number }>) => {
@@ -329,7 +331,16 @@ export function useNodeOperations(params: {
         showToast("노드를 이동할 권한이 없습니다", "error");
         return;
       }
-      const positionMap = new Map(positions.map((pos) => [pos.id, pos]));
+
+      // 경계 제약 적용
+      const validatedPositions = positions.map((pos) => {
+        const clamped = clampNodePosition(pos.x, pos.y);
+        return { id: pos.id, x: clamped.x, y: clamped.y };
+      });
+
+      const positionMap = new Map(
+        validatedPositions.map((pos) => [pos.id, pos])
+      );
 
       crud.transact((map) => {
         positionMap.forEach(({ id, x, y }) => {

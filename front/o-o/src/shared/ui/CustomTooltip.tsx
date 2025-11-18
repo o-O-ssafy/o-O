@@ -22,8 +22,8 @@ const CustomTooltip: React.FC<CustomTooltipProps> = ({ children, content }) => {
         {children}
       </div>
 
-      {isVisible && (
-        <div className="absolute top-full left-[-7px]  mt-2 z-[9999]">
+      {isVisible && content && (
+        <div className="absolute top-full left-[-7px] mt-2 z-[9999]">
           {/* 화살표 (버튼 중앙에 위치) */}
           <div
             className="absolute bottom-full left-7"
@@ -37,7 +37,7 @@ const CustomTooltip: React.FC<CustomTooltipProps> = ({ children, content }) => {
             }}
           />
           {/* 말풍선 */}
-          <div className="bg-[#E1E1E1] text-[#263A6B] px-5 py-3 rounded-2xl shadow-lg whitespace-nowrap">
+          <div className="bg-[#E1E1E1] text-[#263A6B] px-5 py-3 rounded-2xl shadow-lg max-w-xs whitespace-pre-wrap break-words text-sm">
             {content}
           </div>
         </div>

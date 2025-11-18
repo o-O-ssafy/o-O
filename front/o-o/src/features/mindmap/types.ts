@@ -189,6 +189,7 @@ export type ChildNodeRequest = {
   parentY: number;
   keyword: string;
   memo?: string;
+  mediaData?: import("@/features/home/types").MediaData;
 };
 
 export type DeleteNodePayload = {

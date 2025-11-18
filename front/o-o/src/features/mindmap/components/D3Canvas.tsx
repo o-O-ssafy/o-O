@@ -337,6 +337,19 @@ export default function D3Canvas({
     svg.call(zoom);
     zoomBehaviorRef.current = zoom;
 
+    // 초기 뷰포트를 캔버스 중심(2500, 2500)으로 설정
+    const centerX = viewportWidth / 2;
+    const centerY = viewportHeight / 2;
+    const canvasCenterX = CANVAS_WIDTH / 2;
+    const canvasCenterY = CANVAS_HEIGHT / 2;
+
+    const initialTransform = d3.zoomIdentity
+      .translate(centerX, centerY)
+      .scale(1)
+      .translate(-canvasCenterX, -canvasCenterY);
+
+    svg.call(zoom.transform, initialTransform);
+
     // 브라우저 기본 줌 차단 (트랙패드 핀치 포함)
     const preventBrowserZoom = (e: WheelEvent) => {
       // Ctrl/Cmd + 휠 또는 트랙패드 핀치 감지
@@ -356,8 +369,9 @@ export default function D3Canvas({
     };
   }, [d3Ready]);
 
-  // 초기 뷰포트 설정 - 부모 노드를 화면 중앙에 배치
+  // 초기 뷰포트 설정 - 루트 노드 좌표가 처음 설정되었을 때만 화면 중앙에 배치
   const hasInitializedViewportRef = useRef(false);
+
   useEffect(() => {
     if (!svgRef.current || !d3Ready || !zoomBehaviorRef.current) {
       return;
@@ -375,6 +389,17 @@ export default function D3Canvas({
     const parentNode = findParentNode(nodes);
     if (!parentNode) return;
 
+    const currentX = parentNode.x ?? null;
+    const currentY = parentNode.y ?? null;
+
+    // 좌표가 null이면 아직 계산되지 않은 것이므로 대기
+    if (currentX === null || currentY === null) {
+      return;
+    }
+
+    // 초기화 플래그 설정 (한 번만 실행)
+    hasInitializedViewportRef.current = true;
+
     // 약간 지연 후 실행 (DOM 렌더링 대기)
     const timer = setTimeout(() => {
       const container = containerRef.current;
@@ -383,25 +408,20 @@ export default function D3Canvas({
       const centerX = container.clientWidth / 2;
       const centerY = container.clientHeight / 2;
 
-      // 부모 노드의 실제 위치 사용 (어디에 있든 상관없이 화면 중앙에 배치)
-      const parentX = parentNode.x;
-      const parentY = parentNode.y;
-
       const svg = d3.select(svgRef.current);
       const zoom = zoomBehaviorRef.current;
 
-      // 부모 노드가 화면 중앙에 오도록 transform 계산
+      // 루트 노드가 화면 중앙에 오도록 transform 계산
       const initialTransform = d3.zoomIdentity
         .translate(centerX, centerY)
         .scale(1)
-        .translate(-parentX, -parentY);
+        .translate(-currentX, -currentY);
 
       svg.call(zoom.transform, initialTransform);
-      hasInitializedViewportRef.current = true;
     }, 150);
 
     return () => clearTimeout(timer);
-  }, [d3Ready, nodes.length]);
+  }, [d3Ready, nodes]);
 
   // 엣지 렌더링 - D3 렌더링 비활성화 (React 오버레이에서만 렌더링)
   // Edge는 React 오버레이(라인 600번대)에서 직선으로 렌더링됨

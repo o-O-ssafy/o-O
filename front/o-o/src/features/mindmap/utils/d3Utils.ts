@@ -449,7 +449,7 @@ export function applyForceSimulation(
 export function applyDragForce(
   draggedNodeId: string,
   allNodes: Array<{ id: string; x: number; y: number }>,
-  distanceThreshold: number = NODE_RADIUS * 4
+  distanceThreshold: number = NODE_RADIUS * 2 // 320px → 160px로 축소 (연쇄 반응 방지)
 ): Array<{ id: string; x: number; y: number }> {
   const draggedNode = allNodes.find((n) => n.id === draggedNodeId);
   if (!draggedNode) return allNodes;
@@ -473,12 +473,12 @@ export function applyDragForce(
   // Force simulation 생성 (부드럽게 밀어내기)
   const simulation = d3
     .forceSimulation<SimulationNode>(simNodes)
-    // 드래그된 노드를 부드럽게 밀어내는 힘
+    // 드래그된 노드를 부드럽게 밀어내는 힘 (강도 대폭 감소)
     .force(
       "repel",
       d3
         .forceManyBody<SimulationNode>()
-        .strength((d) => (d.isDragged ? -800 : -400)) // 강도를 낮춰서 부드럽게
+        .strength((d) => (d.isDragged ? -200 : -100)) // -800/-400 → -200/-100으로 감소
         .distanceMax(distanceThreshold)
     )
     // 충돌 회피
@@ -487,11 +487,11 @@ export function applyDragForce(
       d3
         .forceCollide<SimulationNode>()
         .radius(NODE_RADIUS * 2)
-        .strength(0.7) // 충돌 강도도 조금 낮춤
+        .strength(0.7)
     )
     // 드래그된 노드의 위치 고정
-    .alphaDecay(0.05) // 더 부드럽게 수렴
-    .velocityDecay(0.3); // 관성을 조금 더 유지
+    .alphaDecay(0.05)
+    .velocityDecay(0.3);
 
   // 드래그된 노드는 위치 고정
   simNodes.forEach((n) => {
@@ -505,12 +505,15 @@ export function applyDragForce(
   simulation.tick(10);
   simulation.stop();
 
-  // 결과 반환
-  return simNodes.map((n) => ({
-    id: n.id,
-    x: n.x ?? 0,
-    y: n.y ?? 0,
-  }));
+  // 결과 반환 (경계 제약 적용)
+  return simNodes.map((n) => {
+    const clamped = clampNodePosition(n.x ?? 0, n.y ?? 0);
+    return {
+      id: n.id,
+      x: clamped.x,
+      y: clamped.y,
+    };
+  });
 }
 
 /**

@@ -14,6 +14,7 @@ import { createRadialGradient } from "@/shared/utils/gradientUtils";
 import type { CytoscapeNodeOverlayProps, RecommendNodeData } from "../../types";
 import warningPopoImage from "@/shared/assets/images/warning_popo.webp";
 import ConfirmDialog from "../../../../shared/ui/ConfirmDialog";
+import CustomTooltip from "../../../../shared/ui/CustomTooltip";
 import { Button } from "@/components/ui/button";
 import YouTubeIcon from "@mui/icons-material/YouTube";
 import PhotoSizeSelectActualOutlinedIcon from "@mui/icons-material/PhotoSizeSelectActualOutlined";
@@ -61,6 +62,7 @@ function NodeOverlay({
     null
   );
   const [hasMoved, setHasMoved] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
   const dragThrottleRef = useRef<number>(0); // 🔥 드래그 중 force simulation 스로틀링
 
   const {
@@ -182,10 +184,25 @@ function NodeOverlay({
     [node.type, isAnalyzeMode]
   );
 
+  // Hover 핸들러
+  const handleMouseEnter = useCallback(() => {
+    // 메모가 있고 드래그 중이 아니면 tooltip 활성화
+    if (memo && !isDragging) {
+      setIsHovered(true);
+    }
+  }, [memo, isDragging]);
+
+  const handleMouseLeave = useCallback(() => {
+    setIsHovered(false);
+  }, []);
+
   // 드래그/클릭 핸들러
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
+
+      // 드래그 시작 시 tooltip 숨김
+      setIsHovered(false);
 
       if (isAnalyzeMode) {
         // analyze 모드에서는 클릭만 처리
@@ -300,10 +317,10 @@ function NodeOverlay({
       onBatchNodePositionChange
     ) {
       // Force simulation 적용 (부드럽게 밀어내기)
+      // 기본값 NODE_RADIUS * 2 (160px) 사용 - 연쇄 반응 방지
       const pushedNodes = applyDragForce(
         node.id,
-        allNodes.map((n) => ({ id: n.id, x: n.x, y: n.y })),
-        NODE_RADIUS * 4 // 거리 임계값 (약 320px)
+        allNodes.map((n) => ({ id: n.id, x: n.x, y: n.y }))
       );
 
       // 밀려난 노드들의 위치만 업데이트
@@ -414,23 +431,26 @@ function NodeOverlay({
           transition: "none", // 애니메이션 제거
         }}
       >
-        <div
-          className={`w-48 h-48 rounded-full flex flex-col items-center justify-center ${selectionRingClass}`}
-          style={{
-            background: createRadialGradient(initialColor),
-            pointerEvents: "auto", // 노드 원형은 클릭 가능
-            cursor: isAnalyzeMode
-              ? "pointer"
-              : isDragging
-                ? "grabbing"
-                : "grab",
-            userSelect: "none", // 드래그 중 텍스트 선택 방지
-            transition: "none", // transition-all 제거
-          }}
-          data-node-id={node.id}
-          data-has-memo={!!memo}
-          onMouseDown={handleMouseDown}
-        >
+        <CustomTooltip content={isHovered && memo && !isDragging ? memo : ""}>
+          <div
+            className={`w-48 h-48 rounded-full flex flex-col items-center justify-center ${selectionRingClass}`}
+            style={{
+              background: createRadialGradient(initialColor),
+              pointerEvents: "auto", // 노드 원형은 클릭 가능
+              cursor: isAnalyzeMode
+                ? "pointer"
+                : isDragging
+                  ? "grabbing"
+                  : "grab",
+              userSelect: "none", // 드래그 중 텍스트 선택 방지
+              transition: "none", // transition-all 제거
+            }}
+            data-node-id={node.id}
+            data-has-memo={!!memo}
+            onMouseDown={handleMouseDown}
+            onMouseEnter={handleMouseEnter}
+            onMouseLeave={handleMouseLeave}
+          >
           {isEditing ? (
             <NodeEditForm
               value={editValue}
@@ -503,7 +523,8 @@ function NodeOverlay({
               )}
             </div>
           )}
-        </div>
+          </div>
+        </CustomTooltip>
 
         {!isAnalyzeMode && !isReadOnly && (
           <RadialToolGroup

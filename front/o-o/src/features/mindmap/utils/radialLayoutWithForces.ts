@@ -10,7 +10,12 @@
  */
 
 import * as d3 from "d3";
-import { CANVAS_CENTER_X, CANVAS_CENTER_Y, NODE_RADIUS } from "./d3Utils";
+import {
+  CANVAS_CENTER_X,
+  CANVAS_CENTER_Y,
+  NODE_RADIUS,
+  clampNodePosition,
+} from "./d3Utils";
 
 /**
  * 노드 위치 인터페이스
@@ -421,12 +426,15 @@ export async function calculateRadialLayoutWithForces(
       const adjustedCrossings = countEdgeCrossings(adjustedPosMap, edges);
       console.log(`[RadialForces] After uniform distribution: ${adjustedCrossings} crossings`);
 
-      // 결과 반환
-      const result: PositionedNode[] = simNodes.map((n) => ({
-        id: n.id,
-        x: n.x ?? centerX,
-        y: n.y ?? centerY,
-      }));
+      // 결과 반환 (경계 제약 적용)
+      const result: PositionedNode[] = simNodes.map((n) => {
+        const clamped = clampNodePosition(n.x ?? centerX, n.y ?? centerY);
+        return {
+          id: n.id,
+          x: clamped.x,
+          y: clamped.y,
+        };
+      });
 
       console.log("[RadialForces] Layout complete:", result.length, "nodes positioned");
       resolve(result);
