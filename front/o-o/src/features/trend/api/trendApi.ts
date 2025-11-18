@@ -12,14 +12,19 @@ export const trendApi = {
     return data;
   },
 
-  // GET /trend/{parentKeyword}
+  // GET /trend?parentKeyword=xxx&period=7d&limit=99
   getChildTrend: async (
-    parentKeyword: string
+    parentKeyword: string,
+    period: string = "7d",
+    limit: number = 99
   ): Promise<TrendKeywordResponse> => {
-    const { data } = await apiClient.get<TrendKeywordResponse>(
-      `/trend/${parentKeyword}`,
-      {}
-    );
+    const { data } = await apiClient.get<TrendKeywordResponse>("/trend", {
+      params: {
+        parentKeyword,
+        period,
+        limit,
+      },
+    });
 
     // parentKeyword와 동일한 키워드를 제외하고 상위 7개만 반환
     const filteredItems = data.items

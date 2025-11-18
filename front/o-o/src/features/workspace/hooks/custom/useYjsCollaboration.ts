@@ -316,7 +316,7 @@ export function useYjsCollaboration(
         });
 
         // JSON 메시지 핸들러 등록
-        client.onJsonMessage((data) => {
+        client.onJsonMessage(async (data) => {
           console.log("💬 [useYjsCollaboration] Received JSON message:", data);
 
           // 아이디어 추가 완료 (GPT 키워드 추출) - 두 가지 타입 모두 지원
@@ -368,6 +368,39 @@ export function useYjsCollaboration(
             }
             // add-idea-done인 경우: 로딩 해제는 position calculation 완료 후 (useCollaborativeNodes에서 처리)
             // 노드들이 0,0에 모였다가 → calculate position → 진짜 position 렌더링 → 로딩 해제
+          }
+          // Ask Popo 재구조화 완료 - Y.Map 완전 교체
+          else if (data.type === "restructure_apply" && data.nodes && Array.isArray(data.nodes)) {
+            console.log(`🔄 restructure_apply: replacing entire Y.Map with`, data.nodes.length, "nodes");
+
+            const nodesMap = client.doc.getMap<NodeData>(NODES_YMAP_KEY);
+
+            // DTO를 NodeData로 변환 및 parentId 타입 정규화
+            const nodeDatas = data.nodes.map((nodeDto: any) => {
+              const nodeData = mapDtoToNodeData(nodeDto);
+              return {
+                ...nodeData,
+                // parentId를 숫자로 정규화 (null 제외)
+                parentId: nodeData.parentId === null ? null : Number(nodeData.parentId),
+              };
+            });
+
+            // position 계산 필요 여부 확인
+            const { calculateNodePositions } = await import("./useCollaborativeNodes");
+            const processedNodes = await calculateNodePositions(nodeDatas);
+
+            // Y.Map 완전 교체 (기존 노드 전부 삭제 후 새로운 노드로 재구성)
+            client.doc.transact(() => {
+              // 1. 기존 노드 모두 제거
+              nodesMap.clear();
+
+              // 2. 새 노드 추가
+              for (const nodeData of processedNodes) {
+                nodesMap.set(nodeData.id, nodeData);
+              }
+            }, "remote");
+
+            console.log(`✅ restructure_apply: Y.Map completely replaced with ${processedNodes.length} nodes`);
           }
           // AI + 트렌드 통합 추천 결과
           else if (data.type === "ai_suggestion" && data.targetNodeId) {

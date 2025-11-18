@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { restructureMindmap } from "@/services/mindmapService";
 import type { RestructureMindmapResponseDTO } from "@/services/dto/mindmap.dto";
 
@@ -8,19 +8,15 @@ import type { RestructureMindmapResponseDTO } from "@/services/dto/mindmap.dto";
  * This triggers GPT-based reorganization of all nodes in the workspace,
  * which may take 4-7 seconds to complete.
  *
+ * NOTE: Real-time updates are handled by WebSocket "restructure_apply" message
+ * in useYjsCollaboration.ts, so no manual query invalidation is needed.
+ *
  * @param workspaceId - Current workspace ID
  * @returns Mutation object with mutate/mutateAsync functions
  */
 export function useRestructureMindmapMutation(workspaceId: string) {
-  const queryClient = useQueryClient();
-
   return useMutation<RestructureMindmapResponseDTO, Error, void>({
     mutationFn: () => restructureMindmap(workspaceId),
-    onSuccess: () => {
-      // Invalidate nodes query to refetch restructured mindmap
-      queryClient.invalidateQueries({
-        queryKey: ["mindmap", "nodes", workspaceId]
-      });
-    },
+    // WebSocket handles Y.Map updates, no need to invalidate queries
   });
 }
