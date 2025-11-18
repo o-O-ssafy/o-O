@@ -58,7 +58,11 @@ export default function AnalyzeTreeNode({
 
         {/* 노드 텍스트 */}
         <span className="flex-1 truncate text-sm text-slate-700">
-          {node.keyword}
+          {node.type === "image"
+            ? "[이미지]"
+            : node.type === "video"
+              ? "[영상]"
+              : node.keyword}
         </span>
 
         {/* 제거 버튼 */}

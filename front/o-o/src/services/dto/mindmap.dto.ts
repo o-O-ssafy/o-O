@@ -98,6 +98,11 @@ export interface InitialMindmapResponseDTO {
   message: string;
 }
 
+// Restructure Mindmap
+export interface RestructureMindmapResponseDTO {
+  message: string;
+}
+
 // Normalizes REST DTOs into the NodeData shape consumed by Yjs/React state
 
 export type NodeDTO = {

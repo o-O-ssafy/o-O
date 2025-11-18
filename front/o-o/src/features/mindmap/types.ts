@@ -12,7 +12,7 @@ export type Transform = {
 // NodeAddInput.tsx
 export type NodeAddInputProps = Readonly<{
   open: boolean;
-  onConfirm: (keyword: string, description: string) => void;
+  onConfirm: (keyword: string, description: string, mediaData?: import("@/features/home/types").MediaData) => void;
   onCancel: () => void;
   buttonRef?: React.RefObject<HTMLButtonElement | null>;
   centerX?: number;

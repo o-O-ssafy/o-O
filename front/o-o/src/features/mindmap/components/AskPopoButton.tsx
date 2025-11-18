@@ -6,13 +6,30 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { useState } from 'react';
+import { Loader2 } from 'lucide-react';
+import { useRestructureMindmapMutation } from '../hooks/mutation/useRestructureMindmapMutation';
+import { useToast } from '@/shared/ui/ToastProvider';
 
-export default function AskPopo() {
+interface AskPopoProps {
+  workspaceId: string;
+}
+
+export default function AskPopo({ workspaceId }: AskPopoProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const { showToast } = useToast();
+  const { mutate, isPending } = useRestructureMindmapMutation(workspaceId);
 
   const handleOrganize = () => {
-    console.log('정리하기 실행!');
-    setIsOpen(false);
+    mutate(undefined, {
+      onSuccess: () => {
+        showToast('아이디어가 정리되었습니다!', 'success');
+        setIsOpen(false);
+      },
+      onError: (error) => {
+        console.error('Restructure failed:', error);
+        showToast('정리에 실패했습니다. 다시 시도해주세요.', 'error');
+      },
+    });
   };
 
   return (
@@ -46,9 +63,17 @@ export default function AskPopo() {
           {/* 정리하기 버튼 */}
           <Button
             onClick={handleOrganize}
+            disabled={isPending}
             className="w-full hover:bg-primary text-white font-medium py-6 rounded-xl"
           >
-            정리하기
+            {isPending ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                정리 중...
+              </>
+            ) : (
+              '정리하기'
+            )}
           </Button>
 
         </div>

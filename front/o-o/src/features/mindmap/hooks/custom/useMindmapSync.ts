@@ -3,6 +3,7 @@ import * as Y from "yjs";
 import type { NodeData } from "../../types";
 import {
   createMindmapNode,
+  createMindmapNodeFromImage,
   updateMindmapNode,
   deleteMindmapNode,
 } from "@/services/mindmapService";
@@ -139,24 +140,40 @@ export function useMindmapSync(
                     if (retryParentNode?.nodeId) {
                       // 부모 nodeId를 찾았으면 직접 백엔드 API 호출
                       const backendParentId = retryParentNode.nodeId as number;
+                      const imageFile = (nodeData as any)._tempImageFile as File | undefined;
 
-                      createMindmapNode(workspaceId, {
-                        parentId: backendParentId,
-                        type: nodeData.type || "text",
-                        keyword: nodeData.keyword,
-                        memo: nodeData.memo,
-                        x: nodeData.x,
-                        y: nodeData.y,
-                        color: nodeData.color,
-                      })
+                      const retryPromise = imageFile
+                        ? createMindmapNodeFromImage(workspaceId, {
+                            file: imageFile,
+                            parentId: backendParentId,
+                            keyword: nodeData.keyword,
+                            memo: nodeData.memo,
+                            x: nodeData.x,
+                            y: nodeData.y,
+                            color: nodeData.color,
+                          })
+                        : createMindmapNode(workspaceId, {
+                            parentId: backendParentId,
+                            type: nodeData.type || "text",
+                            keyword: nodeData.keyword,
+                            memo: nodeData.memo,
+                            x: nodeData.x,
+                            y: nodeData.y,
+                            color: nodeData.color,
+                            contentUrl: nodeData.contentUrl,
+                          });
+
+                      retryPromise
                         .then((createdNode) => {
                           // 백엔드에서 받은 nodeId를 로컬 노드에 반영
                           yMap.doc?.transact(() => {
                             const current = yMap.get(key);
                             if (current && createdNode.nodeId) {
+                              const { _tempImageFile, ...cleanNode } = current as any;
                               yMap.set(key, {
-                                ...current,
+                                ...cleanNode,
                                 nodeId: createdNode.nodeId,
+                                contentUrl: createdNode.contentUrl,
                               });
                             }
                           }, "remote");
@@ -183,27 +200,47 @@ export function useMindmapSync(
             }
           }
 
-          createMindmapNode(workspaceId, {
-            parentId: backendParentId,
-            type: nodeData.type || "text",
-            keyword: nodeData.keyword,
-            memo: nodeData.memo,
-            x: nodeData.x,
-            y: nodeData.y,
-            color: nodeData.color,
-          })
+          // 이미지 파일이 있으면 createMindmapNodeFromImage 호출
+          const imageFile = (nodeData as any)._tempImageFile as File | undefined;
+          const createPromise = imageFile
+            ? createMindmapNodeFromImage(workspaceId, {
+                file: imageFile,
+                parentId: backendParentId,
+                keyword: nodeData.keyword,
+                memo: nodeData.memo,
+                x: nodeData.x,
+                y: nodeData.y,
+                color: nodeData.color,
+              })
+            : createMindmapNode(workspaceId, {
+                parentId: backendParentId,
+                type: nodeData.type || "text",
+                keyword: nodeData.keyword,
+                memo: nodeData.memo,
+                x: nodeData.x,
+                y: nodeData.y,
+                color: nodeData.color,
+                contentUrl: nodeData.contentUrl,
+              });
+
+          createPromise
             .then((createdNode) => {
               // 백엔드에서 받은 nodeId를 로컬 노드에 반영 (조용히)
               yMap.doc?.transact(() => {
                 const current = yMap.get(key);
                 if (current && createdNode.nodeId) {
-                  // 백엔드 nodeId 저장 (나중에 update/delete에 사용)
-                  yMap.set(key, { ...current, nodeId: createdNode.nodeId });
+                  // 백엔드 nodeId 저장 및 임시 파일 제거
+                  const { _tempImageFile, ...cleanNode } = current as any;
+                  yMap.set(key, {
+                    ...cleanNode,
+                    nodeId: createdNode.nodeId,
+                    contentUrl: createdNode.contentUrl, // 서버에서 받은 이미지 URL
+                  });
                 }
               }, "remote");
             })
             .catch((error) => {
-              // Silently fail
+              console.error("[useMindmapSync] Failed to create node:", error);
             })
             .finally(() => {
               syncInProgressRef.current.delete(key);

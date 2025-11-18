@@ -108,14 +108,15 @@ export const useNodeHandlers = ({
   }, [closeAddInput, setFocusedButton]);
 
   const handleAddConfirm = useCallback(
-    (keyword: string, description: string) => {
-      if (keyword) {
+    (keyword: string, description: string, mediaData?: import("@/features/home/types").MediaData) => {
+      if (keyword || mediaData?.type) {
         onCreateChildNode({
           parentId: id,
           parentX: x,
           parentY: y,
           keyword: keyword,
           memo: description || undefined,
+          mediaData: mediaData,
         });
         closeAddInput();
       }

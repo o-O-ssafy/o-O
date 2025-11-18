@@ -131,14 +131,16 @@ export function useNodeOperations(params: {
       parentY,
       keyword,
       memo,
+      mediaData,
     }: {
       parentId: string;
       parentX: number;
       parentY: number;
       keyword: string;
       memo?: string;
+      mediaData?: import("@/features/home/types").MediaData;
     }) => {
-      if (!crud || !keyword) return;
+      if (!crud || (!keyword && !mediaData?.type)) return;
 
       if (!canEditWorkspace(myRole)) {
         showToast("노드를 추가할 권한이 없습니다", "error");
@@ -170,18 +172,32 @@ export function useNodeOperations(params: {
         }
       );
 
+      // 미디어 타입에 따라 노드 타입 결정
+      let nodeType: "text" | "image" | "video" = "text";
+      let contentUrl: string | undefined = undefined;
+
+      if (mediaData?.type === "image") {
+        nodeType = "image";
+      } else if (mediaData?.type === "youtube") {
+        nodeType = "video";
+        contentUrl = mediaData.youtubeUrl;
+      }
+
       const newNode: NodeData = {
         id: `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
         parentId: parentNode.nodeId, // 부모 노드의 nodeId 사용
         workspaceId: parseInt(workspaceId, 10),
-        type: "text",
+        type: nodeType,
         analysisStatus: "NONE",
-        keyword: keyword,
+        keyword: keyword || (mediaData?.type === "image" ? mediaData.imageFile?.name : mediaData?.youtubeUrl) || "",
         x,
         y,
         color: getRandomThemeColor(),
         operation: "ADD",
         ...(memo ? { memo } : {}),
+        ...(contentUrl ? { contentUrl } : {}),
+        // 이미지 파일이 있으면 임시로 저장 (나중에 API 호출 시 사용)
+        ...(mediaData?.type === "image" && mediaData.imageFile ? { _tempImageFile: mediaData.imageFile } : {}),
       };
 
       console.log("[handleCreateChildNode] Creating new child node:", {
@@ -189,6 +205,8 @@ export function useNodeOperations(params: {
         parentId: newNode.parentId,
         parentNodeId: parentNode.nodeId,
         keyword: newNode.keyword,
+        type: nodeType,
+        hasImageFile: !!(mediaData?.type === "image" && mediaData.imageFile),
       });
 
       crud.set(newNode.id, newNode);
