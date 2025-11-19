@@ -15,6 +15,14 @@ spec:
     metadata: { labels: { app: mindmap } }
     spec:
       serviceAccountName: workspace-sa
+
+      # --- [ADD] CloudFront private key secret volume ---
+      volumes:
+        - name: cloudfront-key
+          secret:
+            secretName: cloudfront-private-key
+            defaultMode: 0400
+
       containers:
         - name: mindmap
           image: "559543475782.dkr.ecr.ap-northeast-2.amazonaws.com/o-o-backend:mindmap-service-latest"
@@ -23,28 +31,38 @@ spec:
           resources:
             requests: { cpu: "150m", memory: "256Mi" }
             limits:   { cpu: "400m", memory: "512Mi" }
+
           readinessProbe:
             httpGet: { path: /actuator/health/readiness, port: 8082 }
             initialDelaySeconds: 25
             periodSeconds: 5
             timeoutSeconds: 2
-            failureThreshold: 6          # (선택) 일시적 지연 완충
+            failureThreshold: 6
+
           livenessProbe:
             httpGet: { path: /actuator/health/liveness, port: 8082 }
             initialDelaySeconds: 60
             periodSeconds: 10
             timeoutSeconds: 2
             failureThreshold: 3
+
           startupProbe:
             httpGet: { path: /actuator/health, port: 8082 }
             periodSeconds: 3
-            failureThreshold: 60         # 최대 ~180초(3분)까지 기동 허용
+            failureThreshold: 60
             timeoutSeconds: 2
+
           envFrom:
             - configMapRef:
                 name: mindmap-spring-config
             - secretRef:
                 name: mindmap-spring-secret
+
+          # --- [ADD] CloudFront private key mount ---
+          volumeMounts:
+            - name: cloudfront-key
+              mountPath: /etc/secrets
+              readOnly: true
 ---
 apiVersion: v1
 kind: Service

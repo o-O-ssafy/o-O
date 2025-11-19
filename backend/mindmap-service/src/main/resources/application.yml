@@ -84,6 +84,13 @@ cloud:
       region: ap-northeast-2
       thumbnail-bucket: o-o-bucket
       thumbnail-prefix: mindmap/image
+    cloudfront:
+      # CloudFront Distribution Domain (예: d3abcd1234.cloudfront.net)
+      domain: ${CLOUDFRONT_DOMAIN}
+      # CloudFront Key Pair ID (AWS 콘솔에서 생성한 Key Pair ID)
+      key-pair-id: ${CLOUDFRONT_KEY_PAIR_ID}
+      # CloudFront Private Key 파일 경로 (PEM 형식)
+      private-key-path: ${CLOUDFRONT_PRIVATE_KEY_PATH:/etc/secrets/cloudfront_private_key.pem}
 
 gms:
   base-url: https://gms.ssafy.io/gmsapi

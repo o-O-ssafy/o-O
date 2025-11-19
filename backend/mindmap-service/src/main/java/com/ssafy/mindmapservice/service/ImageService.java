@@ -8,12 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
-import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
-import software.amazon.awssdk.services.s3.presigner.S3Presigner;
-import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
-import software.amazon.awssdk.services.s3.presigner.model.PresignedGetObjectRequest;
 
 import java.io.IOException;
 import java.time.Duration;
@@ -25,7 +20,7 @@ import java.util.UUID;
 public class ImageService {
 
     private final S3Client s3Client;
-    private final S3Presigner s3Presigner;
+    private final CloudFrontUrlService cloudFrontUrlService;
 
     @Value("${cloud.aws.s3.thumbnail-bucket}")
     private String bucket;
@@ -79,24 +74,15 @@ public class ImageService {
     }
 
     /**
-     * DB에 저장된 thumbnail key로 presigned GET URL 생성
+     * DB에 저장된 thumbnail key로 CloudFront Signed URL 생성
+     * 기존 S3 Presigned URL 대비 URL 길이가 대폭 줄어듭니다 (1000~1500자 → 150~250자)
      */
     public String generateImagePresignedUrl(String ImageKey, Duration duration) {
         if (ImageKey == null || ImageKey.isBlank()) {
-        return null;
+            return null;
         }
 
-        GetObjectRequest getObjectRequest = GetObjectRequest.builder()
-                .bucket(bucket)
-                .key(ImageKey)
-                .build();
-
-        GetObjectPresignRequest presignRequest = GetObjectPresignRequest.builder()
-                .signatureDuration(duration)
-                .getObjectRequest(getObjectRequest)
-                .build();
-
-        PresignedGetObjectRequest presigned = s3Presigner.presignGetObject(presignRequest);
-        return presigned.url().toString();
+        // CloudFront Signed URL 생성
+        return cloudFrontUrlService.generateSignedUrl(ImageKey, duration);
     }
 }

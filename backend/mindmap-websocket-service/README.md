@@ -65,6 +65,7 @@ KAFKA_TOPIC_NODE_UPDATE=mindmap.node.update
 # Y.js
 YDOC_GC_ENABLED=true
 YDOC_PERSISTENCE_INTERVAL=5000
+YDOC_IDLE_TIMEOUT_MS=300000  # 5분(300000ms) 동안 접속자 없으면 Y.Doc 자동 삭제
 
 # Logging
 LOG_LEVEL=info
