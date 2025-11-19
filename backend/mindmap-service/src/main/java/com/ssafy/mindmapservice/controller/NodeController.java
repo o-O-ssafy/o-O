@@ -294,20 +294,20 @@ public class NodeController {
 
     @Operation(
             summary = "특정 노드 조회",
-            description = "워크스페이스 내의 특정 노드를 ID로 조회합니다."
+            description = "워크스페이스 내의 특정 노드를 ID로 조회합니다. image 타입인 경우 keyword에 CloudFront Signed URL이 포함됩니다."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "노드 조회 성공"),
             @ApiResponse(responseCode = "404", description = "노드를 찾을 수 없음", content = @Content)
     })
     @GetMapping("/{workspaceId}/node/{nodeId}")
-    public ResponseEntity<MindmapNode> getNode(
+    public ResponseEntity<NodeResponse> getNode(
             @Parameter(description = "워크스페이스 ID", required = true, example = "123")
             @PathVariable Long workspaceId,
             @Parameter(description = "노드 ID", required = true, example = "1")
             @PathVariable Long nodeId) {
         log.info("GET /mindmap/{}/node/{}", workspaceId, nodeId);
-        MindmapNode node = nodeService.getNode(workspaceId, nodeId);
+        NodeResponse node = nodeService.getNodeWithPresignedUrl(workspaceId, nodeId);
         return ResponseEntity.ok(node);
     }
 

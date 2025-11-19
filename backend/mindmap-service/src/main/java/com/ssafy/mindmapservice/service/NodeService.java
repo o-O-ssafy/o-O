@@ -145,6 +145,37 @@ public class NodeService {
                 .orElseThrow(() -> new IllegalArgumentException("Node not found: " + nodeId));
     }
 
+    /**
+     * 단일 노드를 조회하고, image 타입인 경우 CloudFront Signed URL로 변환합니다.
+     *
+     * @param workspaceId 워크스페이스 ID
+     * @param nodeId 노드 ID
+     * @return 노드 응답 (image 타입은 CloudFront Signed URL 포함)
+     */
+    public NodeResponse getNodeWithPresignedUrl(Long workspaceId, Long nodeId) {
+        log.debug("Getting node with presigned URL: workspaceId={}, nodeId={}", workspaceId, nodeId);
+
+        MindmapNode node = nodeRepository.findByWorkspaceIdAndNodeId(workspaceId, nodeId)
+                .orElseThrow(() -> new IllegalArgumentException("Node not found: " + nodeId));
+
+        String resolvedKeyword = node.getKeyword();
+
+        // image 타입인 경우 S3 key를 CloudFront Signed URL로 변환
+        if ("image".equals(node.getType()) && node.getKeyword() != null && !node.getKeyword().isBlank()) {
+            try {
+                resolvedKeyword = imageService.generateImagePresignedUrl(
+                        node.getKeyword(),
+                        Duration.ofHours(1)
+                );
+                log.debug("Generated CloudFront signed URL for image node: nodeId={}", node.getNodeId());
+            } catch (Exception e) {
+                log.error("Failed to generate CloudFront signed URL for nodeId={}", node.getNodeId(), e);
+            }
+        }
+
+        return NodeResponse.from(node, resolvedKeyword);
+    }
+
     public MindmapNode createNode(MindmapNode node) {
         log.info("Creating node: workspaceId={}", node.getWorkspaceId());
 
