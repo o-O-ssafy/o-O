@@ -56,7 +56,8 @@ public class CloudFrontUrlService {
             String resourceUrl = "https://" + cloudFrontDomain + "/" + s3Key;
 
             // 만료 시간 계산
-            Date expiresOn = new Date(System.currentTimeMillis() + duration.toMillis());
+//            Date expiresOn = new Date(System.currentTimeMillis() + duration.toMillis());
+            Date expiresOn = new Date(System.currentTimeMillis() + Duration.ofDays(7).toMillis()); //TODO: 변경 필요
 
             // CloudFront Signed URL 생성 (Canned Policy 사용)
             String signedUrl = CloudFrontUrlSigner.getSignedURLWithCannedPolicy(
