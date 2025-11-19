@@ -300,7 +300,7 @@ public class WorkspaceService {
 
         // 2. 이미 멤버인지 확인
         if (workspaceMemberRepository.existsByWorkspaceIdAndUserId(workspace.getId(), userId)) {
-            throw new BadRequestException(ErrorCode.WORKSPACE_ALREADY_MEMBER);
+            return new WorkspaceJoinResponse(workspace.getId());
         }
 
         // 3. 최대 인원 체크

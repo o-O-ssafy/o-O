@@ -212,11 +212,11 @@ public class WorkspaceController {
 
     @Operation(
             summary = "초대 링크로 워크스페이스 참여",
-            description = "초대 토큰을 사용하여 워크스페이스에 바로 참여합니다. 참여 시 기본 권한은 VIEW로 설정됩니다."
+            description = "초대 토큰을 사용하여 워크스페이스에 바로 참여합니다. 참여 시 기본 권한은 VIEW로 설정됩니다. 이미 멤버라면 바로 방으로 진입합니다."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "참여 성공"),
-            @ApiResponse(responseCode = "400", description = "이미 멤버이거나 인원이 가득 참"),
+            @ApiResponse(responseCode = "400", description = "인원이 가득 참"),
             @ApiResponse(responseCode = "404", description = "유효하지 않은 초대 링크")
     })
     @PostMapping("/join")
