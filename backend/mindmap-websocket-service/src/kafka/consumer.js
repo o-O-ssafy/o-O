@@ -30,6 +30,7 @@ class KafkaConsumerService {
     this.nodeUpdateTopic = process.env.KAFKA_TOPIC_NODE_UPDATE || 'mindmap.node.update';
     this.aiSuggestionTopic = process.env.KAFKA_TOPIC_AI_SUGGESTION || 'mindmap.ai.suggestion';
     this.nodeRestructureTopic  = process.env.KAFKA_TOPIC_RESTRUCTURE || 'mindmap.restructure.update';
+    this.nodeSyncTopic = process.env.KAFKA_TOPIC_NODE_SYNC || 'mindmap.node.sync';
     this.onAiSuggestion = null;
     this.onRestructure = null;
   }
@@ -101,6 +102,11 @@ class KafkaConsumerService {
           fromBeginning: false,
       });
 
+      await this.consumer.subscribe({
+          topic: this.nodeSyncTopic,
+          fromBeginning: false,
+      });
+
 
 
       logger.info(
@@ -148,6 +154,8 @@ class KafkaConsumerService {
                           this.handleAiSuggestion(data);
                       } else if (topic === this.nodeRestructureTopic) {
                           this.handleNodeRestructure(data);
+                      } else if (topic === this.nodeSyncTopic) {
+                          this.handleNodeSync(data);
                       }  else {
                           logger.warn('Received message from unknown topic', { topic, data });
                       }
@@ -311,6 +319,95 @@ class KafkaConsumerService {
           logger.warn('Restructure message received but no handler registered', { data });
       }
   }
+
+  /**
+   * Spring → Kafka(node-sync) → Node.js → Y.Doc 동기화 처리
+   *
+   * 예시 payload:
+   * {
+   *   operation: "ADD",
+   *   workspaceId: 63,
+   *   clientKey: "1764043121049-1zv9etw3u",
+   *   nodeId: 21,
+   *   parentId: 1,
+   *   type: "text",
+   *   keyword: "우끼기",
+   *   memo: null,
+   *   x: 2685.6,
+   *   y: 2479.2,
+   *   color: "#CFAC9D"
+   * }
+   */
+  handleNodeSync(data) {
+      const {
+          operation,
+          workspaceId,
+          clientKey,
+          nodeId,
+          parentId,
+          type,
+          keyword,
+          memo,
+          x,
+          y,
+          color,
+      } = data;
+
+      if (!workspaceId || !clientKey || !nodeId) {
+          logger.warn('[NodeSync] Invalid payload (missing workspaceId/clientKey/nodeId)', { data });
+          return;
+      }
+
+      // Y.Doc 가져오기 (이미 메모리에 있는 경우만)
+      const ydoc = ydocManager.docs.get(workspaceId.toString());
+      if (!ydoc) {
+          logger.debug(`[NodeSync] Workspace ${workspaceId} not in memory, skipping sync`);
+          return;
+      }
+
+      const nodesMap = ydoc.getMap('mindmap:nodes');
+      const prev = nodesMap.get(clientKey);
+
+      if (!prev) {
+          logger.warn('[NodeSync] No local node found for clientKey', {
+              workspaceId,
+              clientKey,
+              nodeId,
+          });
+          return;
+      }
+
+      try {
+          // 🔥 db-sync origin으로 transact → observe에서 다시 Kafka로 안 나가게 막을 수 있음
+          ydoc.transact(() => {
+              nodesMap.set(clientKey, {
+                  ...prev,
+                  nodeId,                           // 서버에서 확정된 도메인 nodeId
+                  parentId: parentId ?? prev.parentId,
+                  type: type ?? prev.type,
+                  keyword: keyword ?? prev.keyword,
+                  memo: memo ?? prev.memo,
+                  x: x ?? prev.x,
+                  y: y ?? prev.y,
+                  color: color ?? prev.color,
+              });
+          }, 'db-sync');
+
+          logger.info('[NodeSync] Synced nodeId from DB to Y.Doc', {
+              workspaceId,
+              clientKey,
+              nodeId,
+          });
+      } catch (error) {
+          logger.error('[NodeSync] Failed to apply sync to Y.Doc', {
+              workspaceId,
+              clientKey,
+              nodeId,
+              error: error.message,
+          });
+      }
+  }
+
 
     /**
    * Kafka consumer 연결 종료 (graceful shutdown)

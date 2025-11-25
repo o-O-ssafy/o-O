@@ -82,6 +82,10 @@ class YDocManager {
       const nodesMap = ydoc.getMap('mindmap:nodes');
 
       nodesMap.observe((event) => {
+          if (event.transaction && event.transaction.origin === 'db-sync') {
+              return;
+          }
+
           const changes= [];
 
           event.changes.keys.forEach((change, key) => {

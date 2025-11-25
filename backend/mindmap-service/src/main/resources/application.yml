@@ -50,6 +50,8 @@ kafka:
     ai-analysis-request: ${KAFKA_TOPIC_AI_REQUEST:ai.analysis.request} # AI 분석 요청 토픽
     ai-suggestion: ${KAFKA_TOPIC_SUGGESTION_REQUEST:mindmap.ai.suggestion}
     ai-analysis-result: ${KAFKA_TOPIC_AI_RESULT:ai.analysis.result} # AI 분석 결과 토픽
+    node-sync-events: ${KAFKA_TOPIC_SYNC:mindmap.node.sync}
+
 
 # 로깅 설정
 logging:
