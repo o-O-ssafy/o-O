@@ -1,15 +1,14 @@
 /**
- * Edge-Crossing 방지 방사형 레이아웃
+ * 계층 기반 방사형 레이아웃
  *
- * 요구사항:
- * 1. 모든 edge는 100% 직선
- * 2. edge 간 교차(crossing) 금지
- * 3. 노드 간 충돌 방지 (forceManyBody + forceCollide)
- * 4. 방사형 트리 구조 유지 (depth별 radius)
- * 5. Force simulation 적용
+ * 알고리즘:
+ * 1. 계층 트리 구성 (루트 노드 찾기 + 부모-자식 관계 매핑)
+ * 2. 루트 노드를 (2500, 2500)에 고정
+ * 3. depth 1 자식들을 루트 중심 360도 원형 배치
+ * 4. depth 2+ 자식들은 부모-루트 각도를 기준으로 배치
+ * 5. 노드 겹침 방지 (각도 조정)
  */
 
-import * as d3 from "d3";
 import {
   CANVAS_CENTER_X,
   CANVAS_CENTER_Y,
@@ -27,103 +26,34 @@ export interface PositionedNode {
 }
 
 /**
- * Edge 정보 인터페이스
+ * 계층 트리 노드 인터페이스
  */
-interface EdgeInfo {
-  source: string;
-  target: string;
-}
-
-/**
- * Simulation 노드 인터페이스
- */
-interface SimulationNode extends d3.SimulationNodeDatum {
+interface TreeNode {
   id: string;
-  x: number;
-  y: number;
-  fx?: number | null;
-  fy?: number | null;
+  parentId: string | null;
+  children: TreeNode[];
   depth: number;
-  angle: number;
-  radius: number;
+  angle?: number;
+  radius?: number;
+  x?: number;
+  y?: number;
 }
 
 /**
- * 두 선분이 교차하는지 확인
- * @returns true if segments intersect
- */
-function doSegmentsIntersect(
-  p1: { x: number; y: number },
-  p2: { x: number; y: number },
-  p3: { x: number; y: number },
-  p4: { x: number; y: number }
-): boolean {
-  const ccw = (A: { x: number; y: number }, B: { x: number; y: number }, C: { x: number; y: number }) => {
-    return (C.y - A.y) * (B.x - A.x) > (B.y - A.y) * (C.x - A.x);
-  };
-
-  return ccw(p1, p3, p4) !== ccw(p2, p3, p4) && ccw(p1, p2, p3) !== ccw(p1, p2, p4);
-}
-
-/**
- * 모든 edge 쌍에 대해 교차 여부를 확인
- * @returns 교차하는 edge 쌍의 개수
- */
-function countEdgeCrossings(
-  positions: Map<string, { x: number; y: number }>,
-  edges: EdgeInfo[]
-): number {
-  let crossings = 0;
-
-  for (let i = 0; i < edges.length; i++) {
-    for (let j = i + 1; j < edges.length; j++) {
-      const edge1 = edges[i];
-      const edge2 = edges[j];
-
-      // 같은 노드를 공유하는 edge는 교차 검사 스킵
-      if (
-        edge1.source === edge2.source ||
-        edge1.source === edge2.target ||
-        edge1.target === edge2.source ||
-        edge1.target === edge2.target
-      ) {
-        continue;
-      }
-
-      const p1 = positions.get(edge1.source);
-      const p2 = positions.get(edge1.target);
-      const p3 = positions.get(edge2.source);
-      const p4 = positions.get(edge2.target);
-
-      if (p1 && p2 && p3 && p4) {
-        if (doSegmentsIntersect(p1, p2, p3, p4)) {
-          crossings++;
-        }
-      }
-    }
-  }
-
-  return crossings;
-}
-
-/**
- * Edge-Crossing을 방지하는 방사형 레이아웃 생성
+ * 계층 기반 방사형 레이아웃 계산
  *
  * 알고리즘:
- * 1. D3 Tree Layout으로 초기 계층 구조 생성 (edge 교차 최소화)
- * 2. 극좌표로 변환 (depth → radius, tree-x → angle)
- * 3. Force Simulation 적용:
- *    - forceManyBody: 노드 간 강한 반발력
- *    - forceCollide: 노드 반지름 기반 충돌 방지
- *    - forceRadial: 각 depth의 radius 유지
- * 4. Edge crossing 검증 및 각도 조정
- * 5. 기존 노드와의 충돌 회피 (고정 장애물로 처리)
+ * 1. 계층 트리 구성 (루트 노드 찾기 + 부모-자식 관계 매핑)
+ * 2. 루트 노드를 (centerX, centerY)에 고정
+ * 3. depth 1 자식들을 루트 중심 360도 원형 배치
+ * 4. depth 2+ 자식들은 부모-루트 각도를 기준으로 배치
+ * 5. 노드 겹침 방지 (각도 조정)
  *
  * @param nodes - 노드 배열
  * @param centerX - 중심 X 좌표
  * @param centerY - 중심 Y 좌표
  * @param baseRadius - depth당 반지름 증가량
- * @param existingPositions - 기존 노드의 고정 위치 (충돌 회피용)
+ * @param existingPositions - 기존 노드의 고정 위치 (현재 미사용)
  * @returns Promise<PositionedNode[]> - 최종 노드 위치
  */
 export async function calculateRadialLayoutWithForces(
@@ -135,16 +65,53 @@ export async function calculateRadialLayoutWithForces(
 ): Promise<PositionedNode[]> {
   if (nodes.length === 0) return [];
 
-  console.log("[RadialForces] Starting layout calculation for", nodes.length, "nodes");
-  console.log("[RadialForces] Existing fixed nodes:", existingPositions.size);
+  console.log("[RadialLayout] Starting layout calculation for", nodes.length, "nodes");
 
-  // ===== 1. 계층 구조 생성 =====
-  interface HierarchyNode {
-    id: string;
-    children?: HierarchyNode[];
+  // ===== 1. 계층 트리 구성 =====
+  const root = buildHierarchyTree(nodes);
+
+  if (!root) {
+    console.error("[RadialLayout] No root node found");
+    return [];
   }
 
-  // nodeId → node.id 매핑 생성 (parentId는 nodeId를 참조하므로)
+  // ===== 2. BFS로 depth 계산 및 계층별 노드 수집 =====
+  calculateDepths(root);
+
+  // ===== 3. 각 depth별로 노드 배치 =====
+  const positions = new Map<string, { x: number; y: number }>();
+
+  // 루트 노드 배치 (중앙 고정)
+  root.x = centerX;
+  root.y = centerY;
+  root.angle = 0;
+  root.radius = 0;
+  positions.set(root.id, { x: centerX, y: centerY });
+
+  console.log(`[RadialLayout] Root node "${root.id}" positioned at (${centerX}, ${centerY})`);
+
+  // depth 1부터 차례로 배치
+  positionChildrenRecursively(root, centerX, centerY, baseRadius, positions);
+
+  // ===== 4. 결과 반환 =====
+  const result: PositionedNode[] = Array.from(positions.entries()).map(([id, pos]) => {
+    const clamped = clampNodePosition(pos.x, pos.y);
+    return {
+      id,
+      x: clamped.x,
+      y: clamped.y,
+    };
+  });
+
+  console.log("[RadialLayout] Layout complete:", result.length, "nodes positioned");
+  return result;
+}
+
+/**
+ * 계층 트리 구조 생성
+ */
+function buildHierarchyTree(nodes: Array<{ id: string; parentId: string | null | undefined }>): TreeNode | null {
+  // nodeId → node.id 매핑 생성 (parentId는 nodeId를 참조)
   const nodeIdToId = new Map<string | number, string>();
   for (const node of nodes) {
     if ("nodeId" in node && node.nodeId != null) {
@@ -153,11 +120,18 @@ export async function calculateRadialLayoutWithForces(
     }
   }
 
-  const nodeMap = new Map<string, HierarchyNode>();
+  // TreeNode 생성
+  const nodeMap = new Map<string, TreeNode>();
   let rootId: string | null = null;
 
   for (const node of nodes) {
-    nodeMap.set(node.id, { id: node.id, children: [] });
+    nodeMap.set(node.id, {
+      id: node.id,
+      parentId: null,
+      children: [],
+      depth: 0,
+    });
+
     // nodeId가 1인 노드를 루트로 판단
     if ("nodeId" in node && (node as any).nodeId === 1) {
       rootId = node.id;
@@ -167,311 +141,116 @@ export async function calculateRadialLayoutWithForces(
   // 부모-자식 관계 구성
   for (const node of nodes) {
     if (node.parentId && node.parentId !== "0") {
-      // parentId는 nodeId를 참조하므로, nodeId로 실제 node.id를 찾음
       const parentNodeId = nodeIdToId.get(node.parentId) ?? nodeIdToId.get(String(node.parentId));
       const parent = parentNodeId ? nodeMap.get(parentNodeId) : null;
       const child = nodeMap.get(node.id);
+
       if (parent && child) {
-        parent.children ??= [];
         parent.children.push(child);
+        child.parentId = parent.id;
       }
     }
   }
 
-  if (!rootId) {
-    console.error("[RadialForces] No root node found");
-    return [];
-  }
+  return rootId ? nodeMap.get(rootId) ?? null : null;
+}
 
-  const root = nodeMap.get(rootId);
-  if (!root) return [];
+/**
+ * BFS로 각 노드의 depth 계산
+ */
+function calculateDepths(root: TreeNode): void {
+  const queue: TreeNode[] = [root];
+  root.depth = 0;
 
-  const hierarchy = d3.hierarchy(root, (d) => d.children);
+  while (queue.length > 0) {
+    const node = queue.shift()!;
 
-  // ===== 2. D3 Tree Layout 적용 (Reingold-Tilford) =====
-  // 이 알고리즘은 edge 교차를 최소화하는 트리 배치를 제공함
-  const nodeWidth = NODE_RADIUS * 6.5; // 노드 간 각도 간격 대폭 증가 (5 → 6.5)
-  const nodeHeight = baseRadius;
-
-  const treeLayout = d3
-    .tree<HierarchyNode>()
-    .nodeSize([nodeWidth, nodeHeight])
-    .separation((a, b) => {
-      // 형제 노드는 2배, 다른 서브트리는 3.5배 간격으로 더 넓게
-      return a.parent === b.parent ? 2.0 : 3.5;
-    });
-
-  const treeRoot = treeLayout(hierarchy);
-
-  // ===== 3. 극좌표 변환 (직교좌표 → 극좌표 → 직교좌표) =====
-  let minX = Infinity,
-    maxX = -Infinity;
-
-  treeRoot.each((node) => {
-    if (node.x < minX) minX = node.x;
-    if (node.x > maxX) maxX = node.x;
-  });
-
-  const xRange = maxX - minX || 1;
-
-  const simNodes: SimulationNode[] = [];
-  const depthMap = new Map<string, number>();
-  const angleMap = new Map<string, number>();
-
-  treeRoot.each((node) => {
-    // Tree의 x좌표를 각도로 변환 (0 ~ 2π)
-    const normalizedX = (node.x - minX) / xRange;
-    const angle = normalizedX * 2 * Math.PI;
-
-    // Tree의 y좌표(depth)를 반지름으로 변환
-    const radius = node.depth * baseRadius;
-
-    // 극좌표 → 직교좌표
-    const x = centerX + radius * Math.sin(angle);
-    const y = centerY - radius * Math.cos(angle);
-
-    depthMap.set(node.data.id, node.depth);
-    angleMap.set(node.data.id, angle);
-
-    simNodes.push({
-      id: node.data.id,
-      x,
-      y,
-      fx: node.depth === 0 ? centerX : null, // 루트는 중앙 고정
-      fy: node.depth === 0 ? centerY : null,
-      depth: node.depth,
-      angle,
-      radius,
-    });
-  });
-
-  console.log("[RadialForces] Initial positions calculated");
-
-  // ===== 3.5. 기존 노드를 고정 장애물로 추가 =====
-  // 기존 노드들을 고정 위치(fx, fy)로 simulation에 포함시켜서
-  // 새 노드들이 기존 노드와 겹치지 않도록 함
-  existingPositions.forEach((pos, nodeId) => {
-    simNodes.push({
-      id: nodeId,
-      x: pos.x,
-      y: pos.y,
-      fx: pos.x, // 고정 X 좌표
-      fy: pos.y, // 고정 Y 좌표
-      depth: -1, // 기존 노드는 depth -1로 표시 (구분용)
-      angle: 0,
-      radius: 0,
-    });
-  });
-
-  console.log("[RadialForces] Total nodes in simulation:", simNodes.length, "(including", existingPositions.size, "fixed obstacles)");
-
-  // Edge 정보 생성 (교차 검증용)
-  const edges: EdgeInfo[] = [];
-  for (const node of nodes) {
-    if (node.parentId && node.parentId !== "0") {
-      edges.push({
-        source: String(node.parentId),
-        target: node.id,
-      });
+    for (const child of node.children) {
+      child.depth = node.depth + 1;
+      queue.push(child);
     }
   }
+}
 
-  // ===== 4. Force Simulation 적용 =====
-  return new Promise((resolve) => {
-    const simulation = d3
-      .forceSimulation<SimulationNode>(simNodes)
-      // 🔥 가장 중요: 노드 간 강한 반발력 (edge 교차 방지)
-      .force(
-        "charge",
-        d3.forceManyBody<SimulationNode>()
-          .strength(-1200) // 더 강한 반발력 (-800 → -1200)
-          .distanceMax(baseRadius * 4) // 영향 범위 확대 (3 → 4)
-      )
-      // 🔥 노드 충돌 방지 (노드 겹침 방지) - 가장 중요!
-      .force(
-        "collide",
-        d3.forceCollide<SimulationNode>()
-          .radius(NODE_RADIUS * 3.5) // 더 넓은 간격 확보 (2.8 → 3.5)
-          .strength(1.0) // 최대 강도 유지
-          .iterations(5) // 반복 횟수 증가 (3 → 5)
-      )
-      // 🔥 각 depth별 radial 위치 유지 (방사형 구조 유지)
-      .force(
-        "radial",
-        d3.forceRadial<SimulationNode>(
-          (d) => d.radius,
-          centerX,
-          centerY
-        ).strength(0.7) // 약간 완화하여 노드가 더 자유롭게 퍼질 수 있도록 (0.8 → 0.7)
-      )
-      // 알파 설정 (시뮬레이션 수렴 속도)
-      .alphaDecay(0.012) // 더 천천히 수렴 (0.015 → 0.012)
-      .velocityDecay(0.3); // 관성 증가로 더 많이 퍼지게 (0.4 → 0.3)
+/**
+ * 재귀적으로 자식 노드 배치
+ */
+function positionChildrenRecursively(
+  parent: TreeNode,
+  centerX: number,
+  centerY: number,
+  baseRadius: number,
+  positions: Map<string, { x: number; y: number }>
+): void {
+  if (parent.children.length === 0) return;
 
-    // 시뮬레이션 진행 상황 모니터링
-    let tickCount = 0;
-    const maxTicks = 400;
+  const depth = parent.depth + 1;
+  const children = parent.children;
+  const childCount = children.length;
 
-    simulation.on("tick", () => {
-      tickCount++;
+  // depth에 따른 반지름 계산
+  let radius = depth * baseRadius;
 
-      // 100 tick마다 edge crossing 체크
-      if (tickCount % 100 === 0) {
-        const posMap = new Map(simNodes.map((n) => [n.id, { x: n.x ?? 0, y: n.y ?? 0 }]));
-        const crossings = countEdgeCrossings(posMap, edges);
-        console.log(`[RadialForces] Tick ${tickCount}: ${crossings} edge crossings`);
-      }
-    });
+  // 🔥 노드가 겹치지 않을 최소 반지름 계산
+  const minNodeSpacing = NODE_RADIUS * 4; // 노드 간 최소 간격
+  const minCircumference = childCount * minNodeSpacing;
+  const minRadius = minCircumference / (2 * Math.PI);
 
-    simulation.on("end", () => {
-      // 최종 edge crossing 확인
-      const posMap = new Map(simNodes.map((n) => [n.id, { x: n.x ?? 0, y: n.y ?? 0 }]));
-      const finalCrossings = countEdgeCrossings(posMap, edges);
+  if (minRadius > radius) {
+    radius = minRadius;
+    console.log(`[RadialLayout] 🔧 Depth ${depth}: radius adjusted to ${radius.toFixed(0)} for ${childCount} nodes`);
+  }
 
-      console.log(`[RadialForces] Simulation complete after ${tickCount} ticks`);
-      console.log(`[RadialForces] Final edge crossings: ${finalCrossings}`);
+  if (depth === 1) {
+    // ===== depth 1: 루트 중심 360도 원형 배치 =====
+    const angleStep = (2 * Math.PI) / childCount;
 
-      // ===== 5. 부모 각도 기반 계층적 배치 (선 교차 방지) =====
-      console.log("[RadialForces] Applying parent-centered hierarchical layout...");
+    for (let i = 0; i < childCount; i++) {
+      const child = children[i];
+      const angle = i * angleStep; // 0부터 시작하여 균등 배치
 
-      // 부모-자식 관계 맵 생성
-      const parentChildMap = new Map<string, string[]>();
-      const childParentMap = new Map<string, string>();
+      child.angle = angle;
+      child.radius = radius;
+      child.x = centerX + radius * Math.cos(angle);
+      child.y = centerY + radius * Math.sin(angle);
 
-      for (const node of nodes) {
-        if (node.parentId && node.parentId !== "0") {
-          const parentId = String(node.parentId);
-          parentChildMap.set(parentId, [...(parentChildMap.get(parentId) || []), node.id]);
-          childParentMap.set(node.id, parentId);
-        }
-      }
+      positions.set(child.id, { x: child.x, y: child.y });
 
-      // 각 depth별로 노드를 그룹화
-      const depthGroups = new Map<number, SimulationNode[]>();
-      for (const node of simNodes) {
-        if (!depthGroups.has(node.depth)) {
-          depthGroups.set(node.depth, []);
-        }
-        depthGroups.get(node.depth)!.push(node);
-      }
+      // 재귀적으로 자식의 자식 배치
+      positionChildrenRecursively(child, centerX, centerY, baseRadius, positions);
+    }
 
-      // 각 노드의 각도 범위 저장 (서브트리 전파용)
-      const nodeAngleRanges = new Map<string, { start: number; end: number; center: number }>();
+    console.log(`[RadialLayout] Depth 1: ${childCount} nodes positioned in 360° circle (radius: ${radius.toFixed(0)})`);
+  } else {
+    // ===== depth 2+: 부모-루트 각도 기준으로 배치 =====
+    const parentAngle = parent.angle ?? 0;
 
-      // 루트 노드는 전체 범위
-      const rootNode = simNodes.find(n => n.depth === 0);
-      if (rootNode) {
-        nodeAngleRanges.set(rootNode.id, { start: 0, end: 2 * Math.PI, center: rootNode.angle });
-      }
+    // 자식들을 부모 각도 중심으로 부채꼴 배치
+    const minAnglePerChild = minNodeSpacing / radius; // 각도로 변환
+    const totalAngleSpread = Math.min(minAnglePerChild * childCount, Math.PI); // 최대 180도
 
-      // BFS로 depth별로 순차 배치
-      const maxDepth = Math.max(...Array.from(depthGroups.keys()));
+    const halfSpread = totalAngleSpread / 2;
+    const angleStep = totalAngleSpread / childCount;
 
-      for (let depth = 1; depth <= maxDepth; depth++) {
-        const nodesAtDepth = depthGroups.get(depth);
-        if (!nodesAtDepth) continue;
+    for (let i = 0; i < childCount; i++) {
+      const child = children[i];
 
-        // 🔥 최소 반지름 계산
-        const nodeCount = nodesAtDepth.length;
-        const nodeSpacing = NODE_RADIUS * 4;
-        const minCircumference = nodeCount * nodeSpacing;
-        const minRadius = minCircumference / (2 * Math.PI);
-        const baseRadiusForDepth = depth * baseRadius;
-        const actualRadius = Math.max(baseRadiusForDepth, minRadius);
+      // 부모 각도를 중심으로 좌우 대칭 배치
+      const childAngle = parentAngle - halfSpread + (i + 0.5) * angleStep;
 
-        if (actualRadius > baseRadiusForDepth) {
-          console.log(`[RadialForces] 🔧 Depth ${depth}: radius adjusted ${baseRadiusForDepth.toFixed(0)} → ${actualRadius.toFixed(0)}`);
-        }
+      child.angle = childAngle;
+      child.radius = radius;
+      child.x = centerX + radius * Math.cos(childAngle);
+      child.y = centerY + radius * Math.sin(childAngle);
 
-        // 부모별로 자식 노드 그룹화
-        const nodesByParent = new Map<string, SimulationNode[]>();
-        for (const node of nodesAtDepth) {
-          const parentId = childParentMap.get(node.id);
-          if (parentId) {
-            nodesByParent.set(parentId, [...(nodesByParent.get(parentId) || []), node]);
-          }
-        }
+      positions.set(child.id, { x: child.x, y: child.y });
 
-        // 각 부모별로 처리
-        for (const [parentId, children] of nodesByParent.entries()) {
-          const parentNode = simNodes.find(n => n.id === parentId);
-          const parentRange = nodeAngleRanges.get(parentId);
+      // 재귀적으로 자식의 자식 배치
+      positionChildrenRecursively(child, centerX, centerY, baseRadius, positions);
+    }
 
-          if (!parentNode || !parentRange) {
-            console.warn(`[RadialForces] Parent ${parentId} not found`);
-            continue;
-          }
-
-          // 부모의 실제 각도를 중심으로 자식들 배치
-          const parentAngle = parentNode.angle;
-          const childCount = children.length;
-
-          // 자식들이 겹치지 않을 최소 각도 계산
-          const minAnglePerChild = (NODE_RADIUS * 4) / actualRadius;
-          const totalAngleNeeded = minAnglePerChild * childCount;
-
-          // 부모가 할당받은 범위 내에서 배치
-          const availableAngle = parentRange.end - parentRange.start;
-          const actualAngleSpread = Math.min(totalAngleNeeded, availableAngle);
-
-          // 자식들을 부모 각도 중심으로 좌우 대칭 배치
-          const halfSpread = actualAngleSpread / 2;
-          const angleStep = actualAngleSpread / childCount;
-
-          for (let i = 0; i < childCount; i++) {
-            const child = children[i];
-
-            // 자식의 각도: 부모 각도 - 절반 + (i + 0.5) * step
-            const childAngle = parentAngle - halfSpread + (i + 0.5) * angleStep;
-
-            // 자식의 각도 범위 계산 (서브트리를 위해 저장)
-            const childAngleStart = parentAngle - halfSpread + (i * angleStep);
-            const childAngleEnd = childAngleStart + angleStep;
-            nodeAngleRanges.set(child.id, {
-              start: childAngleStart,
-              end: childAngleEnd,
-              center: childAngle
-            });
-
-            child.x = centerX + actualRadius * Math.sin(childAngle);
-            child.y = centerY - actualRadius * Math.cos(childAngle);
-            child.angle = childAngle;
-            child.radius = actualRadius;
-          }
-        }
-
-        console.log(`[RadialForces] 🎯 Depth ${depth}: ${nodeCount} nodes, ${nodesByParent.size} parent groups`);
-      }
-
-      // 재조정 후 crossing 확인
-      const adjustedPosMap = new Map(simNodes.map((n) => [n.id, { x: n.x ?? 0, y: n.y ?? 0 }]));
-      const adjustedCrossings = countEdgeCrossings(adjustedPosMap, edges);
-      console.log(`[RadialForces] After uniform distribution: ${adjustedCrossings} crossings`);
-
-      // 결과 반환 (경계 제약 적용)
-      // ✅ 고정 장애물 노드(depth === -1)는 제외하고 새로 계산된 노드만 반환
-      const result: PositionedNode[] = simNodes
-        .filter((n) => n.depth !== -1) // 기존 노드 제외
-        .map((n) => {
-          const clamped = clampNodePosition(n.x ?? centerX, n.y ?? centerY);
-          return {
-            id: n.id,
-            x: clamped.x,
-            y: clamped.y,
-          };
-        });
-
-      console.log("[RadialForces] Layout complete:", result.length, "nodes positioned (excluded", existingPositions.size, "fixed obstacles)");
-      resolve(result);
-    });
-
-    // 강제 종료 (최대 tick)
-    setTimeout(() => {
-      if (tickCount < maxTicks) {
-        simulation.stop();
-      }
-    }, 10000); // 10초 후 강제 종료
-  });
+    console.log(`[RadialLayout] Depth ${depth}: ${childCount} nodes positioned around parent angle ${(parentAngle * 180 / Math.PI).toFixed(1)}° (radius: ${radius.toFixed(0)})`);
+  }
 }
 
 /**
@@ -488,17 +267,17 @@ export async function applyRadialLayoutWithForcesToNodes(
 
   // 기존 좌표가 있는 노드 저장
   const existingPositions = new Map<string, { x: number; y: number }>();
-  const nullPositionNodes = apiNodes.filter((node) => {
+
+  for (const node of apiNodes) {
     if (node.x != null && node.y != null) {
       existingPositions.set(node.id, { x: node.x, y: node.y });
-      return false; // 좌표가 있는 노드는 레이아웃 계산에서 제외
     }
-    return true; // null 좌표만 계산
-  });
+  }
 
-  console.log(`[RadialForces] Applying layout - ${nullPositionNodes.length} null nodes, ${existingPositions.size} preserved nodes`);
+  const nullPositionCount = apiNodes.length - existingPositions.size;
+  console.log(`[RadialLayout] Applying layout - ${nullPositionCount} null nodes, ${existingPositions.size} preserved nodes`);
 
-  // null 좌표 노드만 레이아웃 계산 (기존 노드를 고정 장애물로 전달)
+  // 모든 노드에 대해 레이아웃 계산 (기존 노드는 내부에서 보존됨)
   const positions = await calculateRadialLayoutWithForces(apiNodes, centerX, centerY, baseRadius, existingPositions);
   const positionMap = new Map(positions.map((p) => [p.id, p]));
 
@@ -522,6 +301,6 @@ export async function applyRadialLayoutWithForcesToNodes(
     };
   });
 
-  console.log("[RadialForces] Layout complete - all nodes positioned");
+  console.log("[RadialLayout] Layout complete - all nodes positioned");
   return result;
 }

@@ -532,7 +532,7 @@ export function calculateDistance(
  * 드래그 종료 시 가장 가까운 노드 찾기
  * @param draggedNode 드래그된 노드
  * @param allNodes 모든 노드 배열
- * @param threshold 거리 임계값 (픽셀)
+ * @param threshold 거리 임계값 (픽셀) - 거의 겹쳐야 부모 변경됨
  * @returns 가장 가까운 노드 또는 null
  */
 export function findNearestNode(
@@ -543,7 +543,7 @@ export function findNearestNode(
     y: number;
     parentId?: string | null;
   }>,
-  threshold: number = 200
+  threshold: number = 80
 ): { id: string; distance: number } | null {
   let nearestNode: { id: string; distance: number } | null = null;
   let minDistance = threshold;

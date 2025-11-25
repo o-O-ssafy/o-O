@@ -285,23 +285,101 @@ function findAvailableAngles(
 }
 
 /**
- * 충돌하지 않는 위치 찾기 (반지름 증가 전략)
+ * 충돌하지 않는 위치 찾기 (반지름 증가 + 각도 탐색 전략)
+ *
+ * 알고리즘:
+ * 1. 현재 반지름(200px)에서 지정된 각도 범위를 30도씩 탐색
+ * 2. 빈 공간을 못 찾으면 반지름 증가(250px)하고 다시 탐색
+ * 3. 최대 10번 반복 (200px ~ 650px)
+ *
+ * @param sectorStart - 탐색 시작 각도 (라디안, null이면 360도 전체)
+ * @param sectorEnd - 탐색 종료 각도 (라디안, null이면 360도 전체)
  */
 function findNonCollidingPosition(
   parentX: number,
   parentY: number,
-  angle: number,
+  preferredAngle: number,
   existingNodes: NodeData[],
-  params: LayoutParams
+  params: LayoutParams,
+  sectorStart: number | null = null,
+  sectorEnd: number | null = null
 ): { x: number; y: number } | null {
   let radius = params.baseRadius;
+  const angleStep = Math.PI / 6; // 30도씩 회전
 
-  for (let attempt = 0; attempt < params.maxAttempts; attempt++) {
-    const x = parentX + radius * Math.cos(angle);
-    const y = parentY + radius * Math.sin(angle);
+  // 반지름 증가 루프 (최대 10번)
+  for (let radiusAttempt = 0; radiusAttempt < params.maxAttempts; radiusAttempt++) {
+    // 🔥 현재 반지름에서 각도 탐색
+    if (sectorStart !== null && sectorEnd !== null) {
+      // 섹터 제한이 있는 경우
 
-    if (!isPositionOccupied(x, y, existingNodes, params.minDistance)) {
-      return { x, y };
+      // 🔥 래핑 감지: sectorStart > sectorEnd (예: 330° ~ 60°)
+      const isWrapped = sectorStart > sectorEnd;
+
+      if (isWrapped) {
+        // 래핑된 경우: 두 범위로 분할 탐색
+        // 범위 1: sectorStart ~ 2π (예: 330° ~ 360°)
+        const range1Span = 2 * Math.PI - sectorStart;
+        const numSteps1 = Math.ceil(range1Span / angleStep);
+
+        for (let step = 0; step < numSteps1; step++) {
+          const angle = sectorStart + (step * angleStep);
+          const x = parentX + radius * Math.cos(angle);
+          const y = parentY + radius * Math.sin(angle);
+
+          if (!isPositionOccupied(x, y, existingNodes, params.minDistance)) {
+            console.log(`[findNonCollidingPosition] ✅ Found position at radius ${radius.toFixed(0)}px, angle ${((angle * 180 / Math.PI) % 360).toFixed(0)}° (within wrapped sector part 1)`);
+            return { x, y };
+          }
+        }
+
+        // 범위 2: 0 ~ sectorEnd (예: 0° ~ 60°)
+        const numSteps2 = Math.ceil(sectorEnd / angleStep);
+
+        for (let step = 0; step < numSteps2; step++) {
+          const angle = step * angleStep;
+          const x = parentX + radius * Math.cos(angle);
+          const y = parentY + radius * Math.sin(angle);
+
+          if (!isPositionOccupied(x, y, existingNodes, params.minDistance)) {
+            console.log(`[findNonCollidingPosition] ✅ Found position at radius ${radius.toFixed(0)}px, angle ${((angle * 180 / Math.PI) % 360).toFixed(0)}° (within wrapped sector part 2)`);
+            return { x, y };
+          }
+        }
+
+        console.log(`[findNonCollidingPosition] ⚠️ Radius ${radius.toFixed(0)}px full (wrapped sector ${(sectorStart * 180 / Math.PI).toFixed(0)}°~${(sectorEnd * 180 / Math.PI).toFixed(0)}°) - trying ${(radius + params.radiusStep).toFixed(0)}px`);
+      } else {
+        // 일반 범위 (래핑 없음)
+        const sectorSpan = sectorEnd - sectorStart;
+        const numSteps = Math.ceil(sectorSpan / angleStep);
+
+        for (let step = 0; step < numSteps; step++) {
+          const angle = sectorStart + (step * angleStep);
+          const x = parentX + radius * Math.cos(angle);
+          const y = parentY + radius * Math.sin(angle);
+
+          if (!isPositionOccupied(x, y, existingNodes, params.minDistance)) {
+            console.log(`[findNonCollidingPosition] ✅ Found position at radius ${radius.toFixed(0)}px, angle ${((angle * 180 / Math.PI) % 360).toFixed(0)}° (within sector)`);
+            return { x, y };
+          }
+        }
+
+        console.log(`[findNonCollidingPosition] ⚠️ Radius ${radius.toFixed(0)}px full (sector ${(sectorStart * 180 / Math.PI).toFixed(0)}°~${(sectorEnd * 180 / Math.PI).toFixed(0)}°) - trying ${(radius + params.radiusStep).toFixed(0)}px`);
+      }
+    } else {
+      // 섹터 제한 없음 → 360도 전체 탐색
+      for (let angleOffset = 0; angleOffset < 2 * Math.PI; angleOffset += angleStep) {
+        const angle = preferredAngle + angleOffset;
+        const x = parentX + radius * Math.cos(angle);
+        const y = parentY + radius * Math.sin(angle);
+
+        if (!isPositionOccupied(x, y, existingNodes, params.minDistance)) {
+          console.log(`[findNonCollidingPosition] ✅ Found position at radius ${radius.toFixed(0)}px, angle ${((angle * 180 / Math.PI) % 360).toFixed(0)}°`);
+          return { x, y };
+        }
+      }
+
+      console.log(`[findNonCollidingPosition] ⚠️ Radius ${radius.toFixed(0)}px full (360°) - trying ${(radius + params.radiusStep).toFixed(0)}px`);
     }
 
     radius += params.radiusStep;
@@ -503,6 +581,10 @@ export async function calculateParentCenteredPositions(
 /**
  * 단일 자식 노드의 위치를 계산 (실시간 노드 생성용)
  *
+ * 섹터 제한 로직:
+ * - 루트 노드의 직접 자식: 360도 전체 사용
+ * - 손자 이후: 부모 노드가 루트로부터 위치한 각도 기준 ±60도 섹터 내에서만 배치
+ *
  * @param parentX - 부모 노드 X 좌표
  * @param parentY - 부모 노드 Y 좌표
  * @param parentId - 부모 노드의 nodeId (형제 찾기용)
@@ -523,6 +605,50 @@ export function calculateChildPosition(
 
   // 좌표가 있는 노드만 충돌 감지 대상
   const existingNodes = allNodes.filter((n) => n.x != null && n.y != null);
+
+  // 🔥 루트 노드 찾기 (nodeId === 1)
+  const rootNode = allNodes.find((n) => n.nodeId === 1);
+
+  // 🔥 부모 노드 찾기
+  const parentNode = allNodes.find((n) =>
+    parentId !== null && String(n.nodeId) === String(parentId)
+  );
+
+  // 🔥 섹터 범위 계산 (루트의 직접 자식이 아닌 경우)
+  let sectorStart: number | null = null;
+  let sectorEnd: number | null = null;
+
+  if (rootNode && parentNode && parentNode.nodeId !== 1 && rootNode.x != null && rootNode.y != null) {
+    // 부모가 루트가 아닌 경우 → 섹터 제한 적용
+    // 부모가 루트로부터 어느 각도에 있는지 계산
+    let parentAngleFromRoot = Math.atan2(
+      parentY - rootNode.y,
+      parentX - rootNode.x
+    );
+
+    // 각도를 0 ~ 2π 범위로 정규화
+    if (parentAngleFromRoot < 0) {
+      parentAngleFromRoot += 2 * Math.PI;
+    }
+
+    const sectorSpan = (60 * Math.PI) / 180; // 60도 범위
+    sectorStart = parentAngleFromRoot - sectorSpan / 2; // -30도
+    sectorEnd = parentAngleFromRoot + sectorSpan / 2;   // +30도
+
+    // 🔥 각도 래핑 처리: sectorStart가 음수이면 정규화
+    if (sectorStart < 0) {
+      sectorStart += 2 * Math.PI;
+    }
+
+    // 🔥 sectorEnd가 2π를 넘으면 정규화 (나중에 래핑 처리)
+    if (sectorEnd > 2 * Math.PI) {
+      sectorEnd = sectorEnd % (2 * Math.PI);
+    }
+
+    console.log(`[calculateChildPosition] 🎯 Sector restriction: ${(sectorStart * 180 / Math.PI).toFixed(0)}° ~ ${(sectorEnd * 180 / Math.PI).toFixed(0)}° (parent angle from root: ${(parentAngleFromRoot * 180 / Math.PI).toFixed(0)}°)`);
+  } else {
+    console.log(`[calculateChildPosition] 🌐 No sector restriction (root's direct child or root not found)`);
+  }
 
   // 형제 노드들 찾기 (같은 부모를 가진 노드들)
   const siblings = existingNodes.filter((n) => {
@@ -548,13 +674,15 @@ export function calculateChildPosition(
 
   console.log(`[calculateChildPosition] Selected angle: ${(angle * 180 / Math.PI).toFixed(0)}°`);
 
-  // 충돌하지 않는 위치 찾기
+  // 충돌하지 않는 위치 찾기 (섹터 제한 포함)
   let position = findNonCollidingPosition(
     parentX,
     parentY,
     angle,
     existingNodes,
-    layoutParams
+    layoutParams,
+    sectorStart,
+    sectorEnd
   );
 
   // 실패 시 나선형 탐색

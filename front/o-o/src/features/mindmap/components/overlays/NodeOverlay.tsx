@@ -332,7 +332,7 @@ function NodeOverlay({
         onBatchNodePositionChange(updates);
       }
 
-      // 가까운 노드 찾기 (거리 임계값 200px 이내)
+      // 가까운 노드 찾기 (거리 임계값 80px 이내 - 거의 겹쳐야 부모 변경됨)
       const nearestNode = findNearestNode(
         { id: node.id, x: node.x, y: node.y },
         allNodes.map((n) => ({
@@ -341,7 +341,7 @@ function NodeOverlay({
           y: n.y,
           parentId: n.parentId ? String(n.parentId) : null,
         })),
-        200
+        80
       );
 
       // 🔥 가까운 노드가 있고, 현재 부모와 다른 경우 부모 재연결
