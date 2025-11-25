@@ -1,0 +1,76 @@
+spring:
+  application:
+    name: mindmap-service
+
+  # MongoDB 설정
+  data:
+    mongodb:
+      uri: ${MONGODB_URI:mongodb://localhost:27017}
+      database: mindmap
+      auto-index-creation: true
+
+  # Kafka 설정
+  kafka:
+    bootstrap-servers: ${KAFKA_BROKERS:localhost:9092}
+    consumer:
+      group-id: mindmap-service-consumer
+      auto-offset-reset: latest # 최신 메시지부터 읽기
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      enable-auto-commit: true
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all # 모든 복제본이 확인할 때까지 대기
+      retries: 3
+
+server:
+  port: 8082
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+
+# Kafka 토픽 설정
+kafka:
+  topics:
+    node-events: ${KAFKA_TOPIC_NODE_EVENTS:mindmap.node.events} # 벌크 CRUD
+    node-update: ${KAFKA_TOPIC_NODE_UPDATE:mindmap.node.update} # AI 분석 결과에 따른 노드 업데이트를 알리는 토픽
+    ai-analysis-request: ${KAFKA_TOPIC_AI_REQUEST:ai.analysis.request} # AI 분석 요청 토픽
+    ai-analysis-result: ${KAFKA_TOPIC_AI_RESULT:ai.analysis.result} # AI 분석 결과 토픽
+
+# 로깅 설정
+logging:
+  level:
+    root: INFO
+    com.ssafy.mindmapservice: DEBUG
+    org.springframework.data.mongodb: DEBUG
+    org.springframework.kafka: INFO
+
+# Workspace Service 연동
+workspace:
+  service:
+    url: ${WORKSPACE_SERVICE_URL:http://localhost:8082}
+
+elasticsearch:
+  host: ${ELASTICSEARCH_URL:http://k13d202.p.ssafy.io:9200}
+
+feign:
+  httpclient:
+    enabled: false
+  okhttp:
+    enabled: true
+
+cloud:
+  aws:
+    s3:
+      region: ap-northeast-2
+      thumbnail-bucket: o-o-bucket
+      thumbnail-prefix: mindmap/image
