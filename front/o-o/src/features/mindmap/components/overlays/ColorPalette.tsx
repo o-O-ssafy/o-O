@@ -19,7 +19,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { ColorPaletteProps } from "../../types";
 import { COLOR_THEMES, type ColorThemeName } from "../../styles/colorThemes";
-import { useColorTheme } from "../../hooks/useColorTheme";
 import { createRadialGradient } from "@/shared/utils/gradientUtils";
 
 export default function ColorPalette({
@@ -33,10 +32,7 @@ export default function ColorPalette({
 }: ColorPaletteProps) {
   const paletteRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState({ left: 0, top: 0 });
-  const { getCurrentTheme, setCurrentTheme } = useColorTheme();
-  const [selectedTheme, setSelectedTheme] = useState<ColorThemeName>(() =>
-    getCurrentTheme()
-  );
+  const [selectedTheme, setSelectedTheme] = useState<ColorThemeName>("Pastel");
 
   /** 내부 상태: 현재 색상(hex) + 투명도(0~1) */
   const [currentColor, setCurrentColor] = useState(() => Color(value).alpha(1));
@@ -55,7 +51,6 @@ export default function ColorPalette({
   /** 🎨 테마 변경 */
   const handleThemeChange = (theme: ColorThemeName) => {
     setSelectedTheme(theme);
-    setCurrentTheme(theme);
     onApplyTheme?.([...COLOR_THEMES[theme]]);
   };
 

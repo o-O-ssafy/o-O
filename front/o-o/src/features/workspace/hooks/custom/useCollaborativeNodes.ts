@@ -1,9 +1,6 @@
 import { useEffect, useRef, useMemo, useState } from "react";
 import * as Y from "yjs";
-import {
-  fetchMindmapNodes,
-  batchUpdateNodePositions,
-} from "@/services/mindmapService";
+import { fetchMindmapNodes } from "@/services/mindmapService";
 import { useYMapState } from "./useYMapState";
 import type { NodeData } from "../../../mindmap/types";
 import type { YClient } from "./yjsClient";
@@ -139,29 +136,6 @@ export function useCollaborativeNodes(
         // Calculate positions for nodes with null x/y
         const processedNodes = await calculateNodePositions(restNodes);
 
-        // 🔥 좌표가 정규화된 노드들과 자동 계산된 노드들을 추적 (서버에 저장하기 위해)
-        const nodesToUpdate = processedNodes.filter((processed, index) => {
-          const original = restNodes[index];
-          if (
-            !original ||
-            processed.nodeId == null ||
-            processed.x == null ||
-            processed.y == null
-          ) {
-            return false;
-          }
-
-          // 1. null 좌표가 자동 계산된 경우
-          if (original.x == null || original.y == null) {
-            return true;
-          }
-
-          // 2. 좌표가 0~5000 범위로 정규화된 경우 (_wasClamped 플래그)
-          const wasClamped = (processed as any)._wasClamped === true;
-
-          return wasClamped;
-        });
-
         // ✅ 삽입 직전 최종 재검증: WebSocket 동기화 중 데이터가 들어왔을 수 있음
         if (collab.map.size > 0) {
           console.log(`⚠️ [Bootstrap] Y.Map has ${collab.map.size} nodes after REST fetch, skipping insertion`);
@@ -235,23 +209,7 @@ export function useCollaborativeNodes(
         // 📊 [LOG] Y.Map 상태 확인 (Bootstrap 삽입 후)
         console.log(`📊 [Bootstrap After Insert] Y.Map size: ${collab.map.size}`);
 
-        // 정규화/자동 계산된 좌표를 서버에 저장
-        if (nodesToUpdate.length > 0) {
-          const positionUpdates = nodesToUpdate.map((node: NodeData) => ({
-            nodeId: node.nodeId as number,
-            x: node.x,
-            y: node.y,
-          }));
-
-          try {
-            await batchUpdateNodePositions(workspaceId, positionUpdates);
-          } catch (error) {
-            console.error(
-              `[useCollaborativeNodes] Failed to save position updates:`,
-              error
-            );
-          }
-        }
+        // 좌표는 Y.doc에 저장되며, 백엔드가 Y.doc 변경을 감지하여 자동으로 DB에 저장함
 
         setIsBootstrapping(false);
       } catch (error) {
@@ -345,14 +303,10 @@ export function useCollaborativeNodes(
       try {
         const processedNodes = await calculateNodePositions(nodes);
 
-        // 자동 계산된 좌표를 추적 (서버에 저장하기 위해)
-        const updatedNodesForServer: Array<{
-          nodeId: number;
-          x: number;
-          y: number;
-        }> = [];
+        let updatedCount = 0;
 
         // Yjs map에 업데이트 (실제로 변경된 좌표만)
+        // 백엔드가 Y.doc 변경을 감지하여 자동으로 DB에 저장함
         collab.client.doc.transact(() => {
           for (const node of processedNodes) {
             if (node.x != null && node.y != null) {
@@ -377,14 +331,7 @@ export function useCollaborativeNodes(
                   y: node.y,
                 });
 
-                // nodeId가 있으면 서버 업데이트 목록에 추가
-                if (existingNode.nodeId) {
-                  updatedNodesForServer.push({
-                    nodeId: existingNode.nodeId as number,
-                    x: node.x,
-                    y: node.y,
-                  });
-                }
+                updatedCount++;
               } else {
                 console.log(`⏭️ [Position Update] Skipping node "${node.id}" - coordinates unchanged`);
               }
@@ -392,28 +339,20 @@ export function useCollaborativeNodes(
           }
         }, "position-update");
 
-        // 자동 계산된 좌표를 서버에 저장
-        if (updatedNodesForServer.length > 0) {
-          try {
-            await batchUpdateNodePositions(workspaceId, updatedNodesForServer);
-            console.log("[useCollaborativeNodes] ✅ Position calculation complete, saved", updatedNodesForServer.length, "nodes");
+        // 좌표 업데이트 완료 후 로딩 해제
+        if (updatedCount > 0) {
+          console.log("[useCollaborativeNodes] ✅ Position calculation complete, updated", updatedCount, "nodes (auto-synced to backend via Y.doc)");
 
-            // Textbox 아이디어 추가 로딩 해제 (triple rAF로 완전한 렌더링 완료 후 실행)
-            // Y.Map 업데이트 → React re-render → DOM paint → NodeOverlay mount 완료 대기
+          // Textbox 아이디어 추가 로딩 해제 (triple rAF로 완전한 렌더링 완료 후 실행)
+          // Y.Map 업데이트 → React re-render → DOM paint → NodeOverlay mount 완료 대기
+          requestAnimationFrame(() => {
             requestAnimationFrame(() => {
               requestAnimationFrame(() => {
-                requestAnimationFrame(() => {
-                  useLoadingStore.getState().setIsLoading(false);
-                  console.log("🎉 Position calculation done - loading cleared after render");
-                });
+                useLoadingStore.getState().setIsLoading(false);
+                console.log("🎉 Position calculation done - loading cleared after render");
               });
             });
-          } catch (error) {
-            console.error(
-              `[useCollaborativeNodes] 🔧 Failed to save position updates:`,
-              error
-            );
-          }
+          });
         }
       } finally {
         isCalculatingRef.current = false;
@@ -421,7 +360,7 @@ export function useCollaborativeNodes(
     };
 
     updatePositions();
-  }, [collab, nodes, workspaceId]); // workspaceId 추가
+  }, [collab, nodes]); // workspaceId 불필요 (REST API 호출 제거됨)
 
   // 서버에서 노드 목록을 다시 가져와서 Y.Map에 추가하는 함수
   const refetchAndMergeNodes = async () => {
@@ -456,28 +395,6 @@ export function useCollaborativeNodes(
 
       // Calculate positions for nodes with null x/y
       const processedNodes = await calculateNodePositions(restNodes);
-
-      // 좌표가 자동 계산된 노드들을 추적 (서버에 저장하기 위해)
-      const nodesToUpdate = processedNodes.filter((processed, index) => {
-        const original = restNodes[index];
-        if (
-          !original ||
-          processed.nodeId == null ||
-          processed.x == null ||
-          processed.y == null
-        ) {
-          return false;
-        }
-
-        // null 좌표가 자동 계산된 경우
-        if (original.x == null || original.y == null) {
-          return true;
-        }
-
-        // 좌표가 정규화된 경우
-        const wasClamped = (processed as any)._wasClamped === true;
-        return wasClamped;
-      });
 
       // ✅ 강화된 중복 제거: id와 nodeId 모두 검사
       const existingNodeIds = new Map<number, string>();
@@ -529,23 +446,8 @@ export function useCollaborativeNodes(
         }
       }, "mindmap-refetch");
 
-      // 정규화/자동 계산된 좌표를 서버에 저장
-      if (nodesToUpdate.length > 0) {
-        const positionUpdates = nodesToUpdate.map((node: NodeData) => ({
-          nodeId: node.nodeId as number,
-          x: node.x,
-          y: node.y,
-        }));
-
-        try {
-          await batchUpdateNodePositions(workspaceId, positionUpdates);
-        } catch (error) {
-          console.error(
-            `[useCollaborativeNodes] Failed to save position updates:`,
-            error
-          );
-        }
-      }
+      // 좌표는 Y.doc에 저장되며, 백엔드가 Y.doc 변경을 감지하여 자동으로 DB에 저장함
+      console.log(`[useCollaborativeNodes] Refetch complete, added ${addedCount} nodes (auto-synced to backend via Y.doc)`);
     } catch (error) {
       console.error("[useCollaborativeNodes] Failed to refetch nodes:", error);
     }

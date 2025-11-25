@@ -11,7 +11,7 @@ import { useNodeZIndex } from "../../hooks/custom/useNodeZIndex";
 import { useNodeHandlers } from "../../hooks/custom/useNodeHandlers";
 import { getContrastTextColor } from "@/shared/utils/colorUtils";
 import { createRadialGradient } from "@/shared/utils/gradientUtils";
-import type { CytoscapeNodeOverlayProps, RecommendNodeData } from "../../types";
+import type { NodeOverlayProps, RecommendNodeData } from "../../types";
 import warningPopoImage from "@/shared/assets/images/warning_popo.webp";
 import ConfirmDialog from "../../../../shared/ui/ConfirmDialog";
 import CustomTooltip from "../../../../shared/ui/CustomTooltip";
@@ -51,7 +51,7 @@ function NodeOverlay({
   onKeepChildrenDelete,
   onConnectDetachedSelection,
   onDismissDetachedSelection,
-}: Readonly<CytoscapeNodeOverlayProps>) {
+}: Readonly<NodeOverlayProps>) {
   const { keyword, memo, color: initialColor } = node;
   const isAnalyzeMode = mode === "analyze";
   const isEditDisabled = isReadOnly || isAnalyzeMode;

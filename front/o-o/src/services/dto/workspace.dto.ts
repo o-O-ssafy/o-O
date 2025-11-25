@@ -6,6 +6,19 @@ export type WorkspaceTheme = "SUMMER_BEACH" | "CITRUS" | "RETRO" | "COOL" | "LAV
 
 export type WorkspaceType = "TEAM" | "PERSONAL";
 
+// 백엔드 WorkspaceTheme을 프론트엔드 ColorThemeName으로 매핑
+export function mapWorkspaceThemeToColorTheme(theme: WorkspaceTheme): string {
+  const map: Record<WorkspaceTheme, string> = {
+    SUMMER_BEACH: "Summer Beach",
+    CITRUS: "Citrus",
+    RETRO: "Retro",
+    COOL: "Cool",
+    LAVENDER: "Lavendar",
+    PASTEL: "Pastel",
+  };
+  return map[theme];
+}
+
 // --------------------------------------
 // REQUEST
 // --------------------------------------
@@ -38,6 +51,7 @@ export interface WorkspaceDetailDTO {
   readonly id: number;
   readonly type: WorkspaceType;
   readonly visibility: WorkspaceVisibility;
+  readonly theme: WorkspaceTheme;
   readonly title: string;
   readonly thumbnail?: string;
   readonly createdAt: string;       // ISO

@@ -67,7 +67,7 @@ const VoiceChat: React.FC<VoiceChatProps> = ({
   const { workspace } = useWorkspaceAccessQuery(workspaceId);
 
   // GPT Node Creator
-  const { createNodesFromGpt } = useGptNodeCreator(crud, workspaceId, nodes);
+  const { createNodesFromGpt } = useGptNodeCreator(crud, workspaceId, nodes, workspace?.theme ?? "PASTEL");
 
   // Ref to store handleGptChunk function
   const handleGptChunkRef = useRef<((content: string) => void) | null>(null);

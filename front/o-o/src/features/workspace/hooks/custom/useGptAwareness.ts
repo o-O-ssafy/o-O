@@ -32,25 +32,25 @@ export function useGptAwareness(awareness?: Awareness): GptState | null {
       // Priority: MAINTAINER > Latest timestamp > isRecording
       const states = Array.from(awareness.getStates().entries());
 
-      console.log('[useGptAwareness] 🔍 Checking awareness states:', {
-        totalStates: states.length,
-        myClientId: awareness.clientID,
-        allClientIds: states.map(([id]) => id),
-      });
+      // console.log('[useGptAwareness] 🔍 Checking awareness states:', {
+      //   totalStates: states.length,
+      //   myClientId: awareness.clientID,
+      //   allClientIds: states.map(([id]) => id),
+      // });
 
       // Log ALL states for debugging
       states.forEach(([clientId, state]) => {
         const gptData = (state as any)?.gpt;
         const user = (state as any)?.user;
-        console.log(`[useGptAwareness] 📊 Client ${clientId}:`, {
-          hasGptData: !!gptData,
-          role: user?.role,
-          isRecording: gptData?.isRecording,
-          keywordsCount: gptData?.keywords?.length,
-          keywords: gptData?.keywords?.map((k: any) => k.label),
-          startedBy: gptData?.startedBy,
-          timestamp: gptData?.timestamp,
-        });
+        // console.log(`[useGptAwareness] 📊 Client ${clientId}:`, {
+        //   hasGptData: !!gptData,
+        //   role: user?.role,
+        //   isRecording: gptData?.isRecording,
+        //   keywordsCount: gptData?.keywords?.length,
+        //   keywords: gptData?.keywords?.map((k: any) => k.label),
+        //   startedBy: gptData?.startedBy,
+        //   timestamp: gptData?.timestamp,
+        // });
       });
 
       // 1순위: MAINTAINER의 gptState (빈 배열 포함)
@@ -127,7 +127,7 @@ export function useGptAwareness(awareness?: Awareness): GptState | null {
       }
 
       // No GPT state found
-      console.log('[useGptAwareness] ❌ No GPT state found');
+      // console.log('[useGptAwareness] ❌ No GPT state found');
       setGptState(null);
     };
 

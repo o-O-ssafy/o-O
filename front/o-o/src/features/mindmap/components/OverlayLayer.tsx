@@ -1,9 +1,8 @@
 /**
  * OverlayLayer
  * - HTML overlay for Mindmap nodes
- * - Cytoscape overlay synchronization with React
+ * - D3 transform synchronization with React
  */
-import type { Core } from "cytoscape";
 import NodeOverlay from "./overlays/NodeOverlay";
 import type {
   NodeData,
@@ -12,10 +11,12 @@ import type {
   DetachedSelectionState,
   DeleteNodePayload,
   EditNodePayload,
+  Transform,
 } from "../types";
 
 export default function OverlayLayer({
-  cy,
+  transform,
+  containerSize,
   nodes,
   mode,
   analyzeSelection,
@@ -32,7 +33,8 @@ export default function OverlayLayer({
   onConnectDetachedSelection,
   onDismissDetachedSelection,
 }: Readonly<{
-  cy: Core | null;
+  transform: Transform;
+  containerSize: { width: number; height: number };
   nodes: NodeData[];
   mode: MindmapMode;
   analyzeSelection: string[];
@@ -51,11 +53,10 @@ export default function OverlayLayer({
   onConnectDetachedSelection?: (anchorNodeId: string) => void;
   onDismissDetachedSelection?: (anchorNodeId: string) => void;
 }>) {
-  const zoom = cy?.zoom() ?? 1;
-  const container = cy?.container() ?? null;
-  const viewportWidth = container?.clientWidth ?? null;
-  const viewportHeight = container?.clientHeight ?? null;
+  const { x: tx, y: ty, k: zoom } = transform;
+  const { width: viewportWidth, height: viewportHeight } = containerSize;
   const OVERSCAN_PX = 200;
+
   const childCountMap = nodes.reduce<Map<string, number>>((acc, currentNode) => {
     if (currentNode.parentId) {
       const parentIdStr = String(currentNode.parentId);
@@ -64,59 +65,52 @@ export default function OverlayLayer({
     return acc;
   }, new Map());
 
-  // Debug: 첫 3개 노드의 memo 확인
-  console.log("[OverlayLayer] First 3 nodes:", nodes.slice(0, 3).map(n => ({
-    id: n.id,
-    keyword: n.keyword,
-    memo: n.memo,
-    hasMemo: !!n.memo
-  })));
-
   return (
     <div className="absolute inset-0 pointer-events-none">
-      {cy &&
-        nodes.map((node) => {
-          const el = cy.getElementById(node.id);
-          if (!el || el.empty()) return null;
+      {nodes.map((node) => {
+        // Skip nodes without coordinates
+        if (node.x == null || node.y == null) return null;
 
-          const { x, y } = el.renderedPosition();
-          if (
-            viewportWidth !== null &&
-            viewportHeight !== null &&
-            (x < -OVERSCAN_PX ||
-              x > viewportWidth + OVERSCAN_PX ||
-              y < -OVERSCAN_PX ||
-              y > viewportHeight + OVERSCAN_PX)
-          ) {
-            return null;
-          }
+        // D3 transform: screen coordinates = model * zoom + translate
+        const screenX = node.x * zoom + tx;
+        const screenY = node.y * zoom + ty;
 
-          const nodeId = String(node.id);
-          return (
-            <NodeOverlay
-              key={nodeId}
-              node={node}
-              x={x}
-              y={y}
-              zoom={zoom}
-              hasChildren={(childCountMap.get(nodeId) ?? 0) > 0}
-              mode={mode}
-              isAnalyzeSelected={analyzeSelection.includes(nodeId)}
-              isSelected={selectedNodeId === nodeId}
-              onSelect={() => onNodeSelect(nodeId)}
-              onDeselect={onNodeUnselect}
-              onApplyTheme={onApplyTheme}
-              onDeleteNode={onDeleteNode}
-              onEditNode={onEditNode}
-              onCreateChildNode={onCreateChildNode}
-              onBatchNodePositionChange={onBatchNodePositionChange}
-              detachedSelection={detachedSelectionMap?.[nodeId]}
-              onKeepChildrenDelete={onKeepChildrenDelete}
-              onConnectDetachedSelection={onConnectDetachedSelection}
-              onDismissDetachedSelection={onDismissDetachedSelection}
-            />
-          );
-        })}
+        // Viewport culling with overscan
+        if (
+          screenX < -OVERSCAN_PX ||
+          screenX > viewportWidth + OVERSCAN_PX ||
+          screenY < -OVERSCAN_PX ||
+          screenY > viewportHeight + OVERSCAN_PX
+        ) {
+          return null;
+        }
+
+        const nodeId = String(node.id);
+        return (
+          <NodeOverlay
+            key={nodeId}
+            node={node}
+            x={screenX}
+            y={screenY}
+            zoom={zoom}
+            hasChildren={(childCountMap.get(nodeId) ?? 0) > 0}
+            mode={mode}
+            isAnalyzeSelected={analyzeSelection.includes(nodeId)}
+            isSelected={selectedNodeId === nodeId}
+            onSelect={() => onNodeSelect(nodeId)}
+            onDeselect={onNodeUnselect}
+            onApplyTheme={onApplyTheme}
+            onDeleteNode={onDeleteNode}
+            onEditNode={onEditNode}
+            onCreateChildNode={onCreateChildNode}
+            onBatchNodePositionChange={onBatchNodePositionChange}
+            detachedSelection={detachedSelectionMap?.[nodeId]}
+            onKeepChildrenDelete={onKeepChildrenDelete}
+            onConnectDetachedSelection={onConnectDetachedSelection}
+            onDismissDetachedSelection={onDismissDetachedSelection}
+          />
+        );
+      })}
     </div>
   );
 }

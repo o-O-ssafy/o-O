@@ -1,5 +1,4 @@
 import { useCallback, type RefObject } from "react";
-import type { Core } from "cytoscape";
 import type * as Y from "yjs";
 import type { YMapCrud } from "../../../workspace/hooks/custom/yMapCrud";
 import type {
@@ -37,7 +36,7 @@ import { useLoadingStore } from "@/shared/store/loadingStore";
  *
  * @param params.crud - Y.Map CRUD 작업 래퍼
  * @param params.nodes - 현재 노드 배열
- * @param params.cyRef - Cytoscape 인스턴스 참조
+ * @param params.cyRef - D3 canvas ref (backward compatibility)
  * @param params.mode - 현재 마인드맵 모드 (edit/analyze)
  * @param params.myRole - 현재 사용자의 워크스페이스 역할
  * @param params.getRandomThemeColor - 랜덤 테마 색상 생성 함수
@@ -48,7 +47,7 @@ import { useLoadingStore } from "@/shared/store/loadingStore";
 export function useNodeOperations(params: {
   crud: YMapCrud<NodeData> | null;
   nodes: NodeData[];
-  cyRef: RefObject<Core | null>;
+  cyRef: RefObject<any>;
   mode: MindmapMode;
   workspaceId: string;
   myRole: WorkspaceRole | undefined;
@@ -220,7 +219,7 @@ export function useNodeOperations(params: {
 
       const newNode: NodeData = {
         id: `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
-        parentId: parentNode.nodeId, // 부모 노드의 nodeId 사용
+        parentId: parentNode.nodeId, // 부모 노드의 클라이언트 ID 사용 (Y.doc 기반)
         workspaceId: parseInt(workspaceId, 10),
         type: nodeType,
         analysisStatus: "NONE",
@@ -237,7 +236,7 @@ export function useNodeOperations(params: {
 
       console.log("[handleCreateChildNode] Creating new child node:", {
         id: newNode.id,
-        parentId: newNode.parentId,
+        // parentId: newNode.parentId,
         parentNodeId: parentNode.nodeId,
         keyword: newNode.keyword,
         type: nodeType,
@@ -356,10 +355,11 @@ export function useNodeOperations(params: {
    * 다수 노드 위치 일괄 변경
    * - Layout 재배치 후 호출
    * - 위치를 캔버스 경계 내로 제한 (100px 마진 적용)
+   * - "position-update" origin 사용 (중복 감지 스킵)
    */
   const handleBatchNodePositionChange = useCallback(
     (positions: Array<{ id: string; x: number; y: number }>) => {
-      if (!crud || positions.length === 0) return;
+      if (!yMap || positions.length === 0) return;
 
       if (!canEditWorkspace(myRole)) {
         showToast("노드를 이동할 권한이 없습니다", "error");
@@ -376,15 +376,16 @@ export function useNodeOperations(params: {
         validatedPositions.map((pos) => [pos.id, pos])
       );
 
-      crud.transact((map) => {
+      // "position-update" origin 사용하여 useYMapState에서 중복 체크 스킵
+      yMap.doc?.transact(() => {
         positionMap.forEach(({ id, x, y }) => {
-          const current = map.get(id);
+          const current = yMap.get(id);
           if (!current) return;
-          map.set(id, { ...current, x, y, operation: "UPDATE" });
+          yMap.set(id, { ...current, x, y, operation: "UPDATE" });
         });
-      });
+      }, "position-update");
     },
-    [crud, myRole, showToast]
+    [yMap, myRole, showToast]
   );
 
   /**

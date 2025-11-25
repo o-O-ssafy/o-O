@@ -4,14 +4,15 @@ import type { NodeData } from '../../types';
 import { useColorTheme } from '../useColorTheme';
 import { useNodePositioning } from '../useNodePositioning';
 import { useAppSelector } from '@/store/hooks';
+import type { WorkspaceTheme } from '@/services/dto/workspace.dto';
 
 interface YjsCRUD {
   create: (node: NodeData) => void;
   read: (id: string) => NodeData | undefined;
 }
 
-export function useGptNodeCreator(crud: YjsCRUD | null, workspaceId: string, nodes: NodeData[] = []) {
-  const { getRandomThemeColor } = useColorTheme();
+export function useGptNodeCreator(crud: YjsCRUD | null, workspaceId: string, nodes: NodeData[] = [], workspaceTheme: WorkspaceTheme = "PASTEL") {
+  const { getRandomThemeColor } = useColorTheme(workspaceTheme);
   const { findNonOverlappingPosition } = useNodePositioning();
   const currentUser = useAppSelector((state) => state.user.user);
 

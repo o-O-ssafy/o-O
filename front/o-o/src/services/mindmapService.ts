@@ -53,27 +53,6 @@ export const fetchMindmapNodes = async (
     .map(clampNodePosition);
 };
 
-// Creates a new mindmap node
-export const createMindmapNode = async (
-  workspaceId: string,
-  request: {
-    parentId?: number | null;
-    type: string;
-    keyword: string;
-    memo?: string;
-    x: number;
-    y: number;
-    color?: string;
-    contentUrl?: string | null;
-  }
-): Promise<NodeData> => {
-  const { data } = await apiClient.post<NodeDTO>(
-    `/mindmap/${workspaceId}/node`,
-    request
-  );
-  return mapDtoToNodeData(data);
-};
-
 // Creates a new mindmap node from image file
 export const createMindmapNodeFromImage = async (
   workspaceId: string,
@@ -116,52 +95,6 @@ export const createMindmapNodeFromImage = async (
     }
   );
   return mapDtoToNodeData(data);
-};
-
-// Updates an existing mindmap node
-export const updateMindmapNode = async (
-  workspaceId: string,
-  nodeId: number,
-  request: {
-    keyword?: string | null;
-    memo?: string | null;
-    x?: number | null;
-    y?: number | null;
-    color?: string | null;
-    parentId?: number | null;
-    type?: string | null;
-    analysisStatus?: string | null;
-  }
-): Promise<NodeData> => {
-  const { data } = await apiClient.patch<NodeDTO>(
-    `/mindmap/${workspaceId}/node/${nodeId}`,
-    request
-  );
-  return mapDtoToNodeData(data);
-};
-
-// Deletes a mindmap node
-export const deleteMindmapNode = async (
-  workspaceId: string,
-  nodeId: number
-): Promise<void> => {
-  await apiClient.delete(`/mindmap/${workspaceId}/node/${nodeId}`);
-};
-
-// Batch update node positions (for auto-layout calculated coordinates)
-export const batchUpdateNodePositions = async (
-  workspaceId: string,
-  updates: Array<{ nodeId: number; x: number; y: number }>
-): Promise<void> => {
-  // 각 노드를 개별적으로 PATCH 요청 (배치 엔드포인트가 없는 경우)
-  await Promise.all(
-    updates.map((update) =>
-      updateMindmapNode(workspaceId, update.nodeId, {
-        x: update.x,
-        y: update.y,
-      })
-    )
-  );
 };
 
 // AI 분석 요청 (CONTEXTUAL - 맥락 기반 AI + 트렌드 확장 추천)

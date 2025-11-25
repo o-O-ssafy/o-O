@@ -1,6 +1,6 @@
 /**
  * Animation Configuration
- * - Centralized animation settings for Cytoscape.js
+ * - Centralized animation settings for D3.js graph rendering
  * - Supports accessibility (prefers-reduced-motion)
  */
 

@@ -62,7 +62,7 @@ export type CytoscapeCanvasProps = Readonly<{
   onDismissDetachedSelection?: (anchorNodeId: string) => void;
 }>;
 
-export type CytoscapeNodeOverlayProps = {
+export type NodeOverlayProps = {
   node: NodeData;
   x: number;
   y: number;

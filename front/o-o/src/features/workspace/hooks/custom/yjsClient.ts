@@ -61,19 +61,34 @@ export const createYClient = (
     },
   });
 
-  provider.on(
-    "status",
-    (event: { status: "connected" | "disconnected" | "connecting" }) => {
-      console.log("[WebSocket] Status changed:", event.status);
-    }
-  );
+  // WebSocket 연결 후 onmessage 래핑을 위한 플래그
+  let isWsWrapped = false;
 
-  provider.on("sync", (isSynced: boolean) => {
-    console.log("[WebSocket] Sync status changed:", isSynced);
-  });
+  const wrapWebSocket = () => {
+    if (isWsWrapped || !provider.ws) return;
+    isWsWrapped = true;
 
-  // WebSocket 원시 메시지 감지 및 JSON 메시지 처리
-  if (provider.ws) {
+    console.log("[WebSocket] Wrapping onmessage handler");
+
+    // 🔍 DEBUG: WebSocket send 래핑하여 송신 메시지 로깅
+    const originalSend = provider.ws.send.bind(provider.ws);
+    provider.ws.send = (data: string | ArrayBufferLike | Blob | ArrayBufferView) => {
+      if (data instanceof ArrayBuffer || data instanceof Uint8Array) {
+        console.log("📤 [WebSocket] Sending binary message:", {
+          type: "binary",
+          size: data instanceof ArrayBuffer ? data.byteLength : data.length,
+          timestamp: new Date().toISOString(),
+        });
+      } else if (typeof data === "string") {
+        console.log("📤 [WebSocket] Sending text message:", {
+          type: "text",
+          preview: data.substring(0, 100),
+          timestamp: new Date().toISOString(),
+        });
+      }
+      return originalSend(data);
+    };
+
     const originalOnMessage = provider.ws.onmessage;
     provider.ws.onmessage = (event) => {
       // 텍스트 메시지인 경우 JSON 파싱 후 처리
@@ -94,33 +109,85 @@ export const createYClient = (
           // (Yjs는 바이너리만 처리 가능하므로 에러 방지)
           return;
         } catch (e) {
-          // JSON 파싱 실패 시 무시
+          // JSON 파싱 실패 시 무시 (바이너리 메시지)
         }
       }
 
-      // 바이너리 메시지만 원래 Yjs 핸들러로 전달
+      // 바이너리 메시지는 원래 Yjs 핸들러로 전달
       if (originalOnMessage && provider.ws) {
         originalOnMessage.call(provider.ws, event);
       }
     };
-  }
+  };
+
+  provider.on(
+    "status",
+    (event: { status: "connected" | "disconnected" | "connecting" }) => {
+      console.log("[WebSocket] Status changed:", event.status);
+
+      // 연결 완료 후 WebSocket 래핑
+      if (event.status === "connected") {
+        wrapWebSocket();
+      }
+    }
+  );
+
+  provider.on("sync", (isSynced: boolean) => {
+    console.log("[WebSocket] Sync status changed:", isSynced);
+    console.log("[WebSocket] Provider synced:", provider.synced);
+    console.log("[WebSocket] Doc clients count:", doc.store.clients.size);
+    console.log("[WebSocket] Doc client IDs:", Array.from(doc.store.clients.keys()));
+    console.log("[WebSocket] My client ID:", doc.clientID);
+    console.log("[WebSocket] Doc isLoaded:", (doc as any).isLoaded);
+    console.log("[WebSocket] Doc isSynced:", (doc as any).isSynced);
+  });
 
   // Y.Doc 업데이트 감지 (실제 WebSocket으로 데이터가 올 때)
-  // doc.on("update", (update: Uint8Array, origin: any) => {
-  //   console.log("🔥 [WebSocket] Y.Doc Update received!", {
-  //     updateSize: update.length,
-  //     origin: origin,
-  //     isFromWebSocket: origin === provider,
-  //     timestamp: new Date().toISOString(),
-  //   });
+  doc.on("update", (update: Uint8Array, origin: any) => {
+    console.log("\n🔥 ============ Yjs Update Received ============");
+    console.log("📏 Size:", update.length, "bytes");
+    console.log("🔑 Origin:", origin);
+    console.log("🌐 From WebSocket:", origin === provider ? "YES" : "NO");
+    console.log("⏰ Time:", new Date().toISOString());
 
-  //   // WebSocket에서 온 업데이트인 경우 Y.Map 내용 확인
-  //   if (origin === provider) {
-  //     const mindmapNodes = doc.getMap("mindmap:nodes");
-  //     console.log("📊 [WebSocket] Current Y.Map size:", mindmapNodes.size);
-  //     console.log("📊 [WebSocket] All nodes in Y.Map:", mindmapNodes.toJSON());
-  //   }
-  // });
+    // 실제 변경된 내용 분석
+    const mindmapNodes = doc.getMap("mindmap:nodes");
+
+    console.log("\n📊 Current State:");
+    console.log("  - Total nodes in Y.Map:", mindmapNodes.size);
+
+    if (mindmapNodes.size > 0) {
+      console.log("\n📝 All Nodes Content:");
+      const allNodes = mindmapNodes.toJSON();
+      Object.entries(allNodes).forEach(([key, value]) => {
+        console.log(`\n  Node ID: ${key}`);
+        console.log("  Full data:", JSON.stringify(value, null, 2));
+      });
+    }
+
+    // 업데이트 구조 디코딩
+    try {
+      const decoded = Y.decodeUpdate(update);
+      console.log("\n🔍 Update Details:");
+      console.log("  - Number of changes:", decoded.structs?.length || 0);
+      console.log("  - Has deletions:", decoded.ds ? "YES" : "NO");
+
+      // 변경 타입 분석
+      if (origin === provider) {
+        console.log("  📥 Type: RECEIVED from server/other clients");
+      } else if (origin === "mindmap-bootstrap") {
+        console.log("  🚀 Type: INITIAL BOOTSTRAP");
+      } else if (origin === "local") {
+        console.log("  📤 Type: LOCAL CHANGE (will be sent to server)");
+      } else {
+        console.log("  ❓ Type:", origin);
+      }
+    } catch (err) {
+      console.error("❌ Failed to decode:", err);
+    }
+
+    console.log("============================================\n");
+  });
 
   const connect = () => provider.connect();
   const disconnect = () => provider.disconnect();
