@@ -351,6 +351,7 @@ class KafkaConsumerService {
           x,
           y,
           color,
+          _id
       } = data;
 
       if (!workspaceId || !clientKey || !nodeId) {
@@ -382,6 +383,7 @@ class KafkaConsumerService {
           ydoc.transact(() => {
               nodesMap.set(clientKey, {
                   ...prev,
+                  id: _id,
                   nodeId,                           // 서버에서 확정된 도메인 nodeId
                   parentId: parentId ?? prev.parentId,
                   type: type ?? prev.type,

@@ -165,10 +165,21 @@ public class NodeEventConsumer {
             bulkOps.execute();
             log.info("Successfully processed {} node events", events.size());
 
-            for (Map<String, Object> nodeInfo : createdNodes) {
-                nodeSyncProducer.sendNodeCreatedSync(nodeInfo);
-            }
+            for (Map<String, Object> n : createdNodes) {
+                Long wsId = (Long) n.get("workspaceId");
+                Long newNodeId = (Long) n.get("nodeId");
 
+                Query findQuery = new Query(
+                        Criteria.where("workspaceId").is(wsId)
+                                .and("nodeId").is(newNodeId)
+                );
+                MindmapNode saved = mongoTemplate.findOne(findQuery, MindmapNode.class);
+
+                if (saved != null) {
+                    n.put("_id", saved.getId()); // MongoDB ObjectId 문자열
+                    nodeSyncProducer.sendNodeCreatedSync(n);
+                }
+            }
 
         } catch (Exception e) {
             log.error("Failed to process Kafka message", e);
