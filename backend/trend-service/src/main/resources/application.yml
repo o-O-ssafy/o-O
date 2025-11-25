@@ -1,0 +1,100 @@
+spring:
+  application:
+    name: trend-service
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT}
+      password: ${REDIS_PASSWORD}
+      lettuce:
+        pool:
+          max-active: 20
+          max-idle: 10
+          min-idle: 5
+          max-wait: 2000ms
+        shutdown-timeout: 200ms
+  kafka:
+    bootstrap-servers: ${KAFKA_HOST}
+    consumer:
+      group-id: trend-service-group
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+        max.poll.records: 500
+        max.poll.interval.ms: 300000
+    listener:
+      ack-mode: manual
+      concurrency: 3
+
+  datasource:
+    url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 20000
+      idle-timeout: 300000
+      max-lifetime: 1200000
+      pool-name: TrendHikariPool
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+
+trend:
+  kafka:
+    topic: mindmap.relation.events
+
+  redis:
+    ttl:
+      daily-hash: 691200  # 8 days in seconds
+      realtime-bucket: 7200  # 2 hours in seconds
+      zset-cache: 600  # 10 minutes in seconds
+
+  batch:
+    # Redis -> DB 집계 주기 (cron)
+    aggregation-cron: "0 */10 * * * *"  # 매 10분마다
+    # ZSET 캐시 리빌드 주기
+    cache-rebuild-cron: "0 */5 * * * *"  # 매 5분마다
+    # 배치 처리 시 한 번에 가져올 키 개수
+    scan-count: 100
+    # 분산 락 타임아웃 (초)
+    lock-timeout: 300
+
+  query:
+    # 기본 조회 limit
+    default-limit: 5
+    max-limit: 100
+
+# Logging
+logging:
+  level:
+    root: INFO
+    com.ssafy.trendservice: DEBUG
+    org.springframework.kafka: WARN
+    org.springframework.data.redis: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+
+server:
+  port: 8085
+  shutdown: graceful
+
+mindmap:
+  service:
+    url: http://mindmap-svc:8082
+
+elasticsearch:
+  host: ${ELASTICSEARCH_URL:http://k13d202.p.ssafy.io:9200}

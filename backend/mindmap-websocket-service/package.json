@@ -1,0 +1,34 @@
+{
+  "name": "mindmap-websocket-service",
+  "version": "1.0.0",
+  "description": "o-O Mindmap Real-time Collaboration Server with Y.js",
+  "main": "src/server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "yjs",
+    "websocket",
+    "collaboration",
+    "mindmap",
+    "crdt"
+  ],
+  "author": "o-O Team",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "ws": "^8.14.2",
+    "y-websocket": "^1.5.0",
+    "yjs": "^13.6.10",
+    "kafkajs": "^2.2.4",
+    "dotenv": "^16.3.1",
+    "uuid": "^9.0.1",
+    "mongodb": "^6.3.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

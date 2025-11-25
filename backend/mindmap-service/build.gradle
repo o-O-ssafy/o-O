@@ -1,0 +1,87 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.4.11'
+    id 'io.spring.dependency-management' version '1.1.7'
+}
+
+ext {
+    set('springCloudVersion', "2024.0.0")
+}
+
+group = 'com.ssafy'
+version = '0.0.1-SNAPSHOT'
+description = 'mindmap-service'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+configurations {
+    compileOnly {
+        extendsFrom annotationProcessor
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // Spring Boot Starters
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+
+    // MongoDB
+    implementation 'org.springframework.boot:spring-boot-starter-data-mongodb'
+
+    // Kafka
+    implementation 'org.springframework.kafka:spring-kafka'
+
+    // WebClient (AI Service 호출용)
+    implementation 'org.springframework.boot:spring-boot-starter-webflux'
+
+    // OpenFeign (workspace-service 호출용)
+    implementation 'org.springframework.cloud:spring-cloud-starter-openfeign'
+
+    // Swagger/OpenAPI
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.7.0'
+
+    // Lombok
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+
+    // Test
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.springframework.kafka:spring-kafka-test'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+    implementation 'co.elastic.clients:elasticsearch-java:8.14.0'
+    implementation 'org.elasticsearch.client:elasticsearch-rest-client:8.14.0'
+    // JSON 매퍼 (Jackson)
+    implementation 'com.fasterxml.jackson.core:jackson-databind'
+    implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
+
+    // openfeign patch 지원하도록 하는 okhttp
+    implementation 'io.github.openfeign:feign-okhttp'
+
+    // AWS S3
+    implementation platform("software.amazon.awssdk:bom:2.25.65") // 버전은 프로젝트에 맞게
+    implementation "software.amazon.awssdk:s3"
+    implementation "software.amazon.awssdk:sts"
+
+    // AWS SDK v1 CloudFront URL Signer (Signed URL 생성용)
+    implementation 'com.amazonaws:aws-java-sdk-cloudfront:1.12.774'
+}
+
+dependencyManagement {
+    imports {
+        mavenBom "org.springframework.cloud:spring-cloud-dependencies:${springCloudVersion}"
+    }
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}

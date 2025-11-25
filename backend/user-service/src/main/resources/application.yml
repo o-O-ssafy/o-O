@@ -1,0 +1,74 @@
+spring:
+  application:
+    name: user-service 
+
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+    open-in-view: false
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD}
+
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: ${GOOGLE_CLIENT_ID}
+            client-secret: ${GOOGLE_CLIENT_SECRET}
+            scope:
+              - email
+              - profile
+#            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
+            redirect-uri: "${OAUTH2_REDIRECT_URI}"
+        provider:
+          google:
+            authorization-uri: https://accounts.google.com/o/oauth2/v2/auth
+            token-uri: https://oauth2.googleapis.com/token
+            user-info-uri: https://www.googleapis.com/oauth2/v3/userinfo
+            user-name-attribute: sub
+
+jwt:
+  secret: ${JWT_SECRET}
+  access-token-expiration: 3600000  # 1시간
+#  access-token-expiration: 60000  # 60초
+  refresh-token-expiration: 604800000  # 7일
+
+google:
+  client-id-mobile: ${GOOGLE_CLIENT_ID_MOBILE_MAC}
+  client-id-ios: ${GOOGLE_CLIENT_ID_IOS}
+  client-id-web: ${GOOGLE_CLIENT_ID}
+  client-id-mobile-ssafy: ${GOOGLE_CLIENT_ID_MOBILE_SSAFY}
+
+oauth2:
+  redirect:
+    frontend-url: ${FRONTEND_REDIRECT_URL}
+
+server:
+  port: 8081
+  
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info   # 필요하면 '*' (운영에선 health 정도 권장)
+  endpoint:
+    health:
+      probes:
+        enabled: true          # /actuator/health/liveness, /readiness 자동 생성
+      show-details: never      # 운영 기본값. 필요시 when_authorized

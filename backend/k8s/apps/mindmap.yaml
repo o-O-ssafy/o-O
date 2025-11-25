@@ -1,0 +1,111 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mindmap-deploy
+  namespace: prod
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector: { matchLabels: { app: mindmap } }
+  template:
+    metadata: { labels: { app: mindmap } }
+    spec:
+      serviceAccountName: workspace-sa
+
+      # --- [ADD] CloudFront private key secret volume ---
+      volumes:
+        - name: cloudfront-key
+          secret:
+            secretName: cloudfront-private-key
+            defaultMode: 0400
+
+      containers:
+        - name: mindmap
+          image: "559543475782.dkr.ecr.ap-northeast-2.amazonaws.com/o-o-backend:mindmap-service-latest"
+          imagePullPolicy: Always
+          ports: [{ containerPort: 8082 }]
+          resources:
+            requests: { cpu: "150m", memory: "256Mi" }
+            limits:   { cpu: "400m", memory: "512Mi" }
+
+          readinessProbe:
+            httpGet: { path: /actuator/health/readiness, port: 8082 }
+            initialDelaySeconds: 25
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 6
+
+          livenessProbe:
+            httpGet: { path: /actuator/health/liveness, port: 8082 }
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+
+          startupProbe:
+            httpGet: { path: /actuator/health, port: 8082 }
+            periodSeconds: 3
+            failureThreshold: 60
+            timeoutSeconds: 2
+
+          envFrom:
+            - configMapRef:
+                name: mindmap-spring-config
+            - secretRef:
+                name: mindmap-spring-secret
+
+          # --- [ADD] CloudFront private key mount ---
+          volumeMounts:
+            - name: cloudfront-key
+              mountPath: /etc/secrets
+              readOnly: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mindmap-svc
+  namespace: prod
+spec:
+  type: ClusterIP
+  selector: { app: mindmap }
+  ports:
+    - name: http
+      port: 8082
+      targetPort: 8082
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: mindmap-hpa
+  namespace: prod
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: mindmap-deploy
+  minReplicas: 1
+  maxReplicas: 2
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 180
+      policies:
+        - type: Percent
+          value: 50
+          periodSeconds: 60

@@ -1,0 +1,148 @@
+spring:
+  application:
+    name: gateway-service
+  cloud:
+    gateway:
+      default-filters:
+        - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
+      httpclient:
+        wiretap: true
+      httpserver:
+        wiretap: true
+      routes:
+          # User Service 정적 라우팅
+          - id: user-service-auth
+            uri: ${USER_SERVICE_URL:http://localhost:8081}
+            predicates:
+              - Path=/auth/**
+            filters:
+              - PreserveHostHeader
+          - id: user-service-oauth2
+            uri: ${USER_SERVICE_URL:http://localhost:8081}
+            predicates:
+              - Path=/oauth2/**
+            filters:
+              - PreserveHostHeader
+          - id: user-service-oauth2-callback
+            uri: ${USER_SERVICE_URL:http://localhost:8081}
+            predicates:
+              - Path=/login/oauth2/**
+            filters:
+              - PreserveHostHeader
+          - id: user-service-users
+            uri: ${USER_SERVICE_URL:http://localhost:8081}
+            predicates:
+              - Path=/users/**
+            filters:
+              - PreserveHostHeader
+          # User Service Swagger API Docs
+          - id: user-service-swagger
+            uri: ${USER_SERVICE_URL:http://localhost:8081}
+            predicates:
+              - Path=/user-service/v3/api-docs/**
+            filters:
+              - StripPrefix=1
+          # Workspace Service 정적 라우팅
+          - id: workspace-service
+            uri: ${WORKSPACE_SERVICE_URL:http://localhost:8082}
+            predicates:
+              - Path=/workspace/**
+          # Workspace Service Swagger API Docs
+          - id: workspace-service-swagger
+            uri: ${WORKSPACE_SERVICE_URL:http://localhost:8082}
+            predicates:
+              - Path=/workspace-service/v3/api-docs/**
+            filters:
+              - StripPrefix=1
+          # Mindmap WebSocket Service (실시간 협업)
+          - id: mindmap-websocket-service
+            uri: ${MINDMAP_WEBSOCKET_SERVICE_URL:ws://localhost:8084}
+            predicates:
+              - Path=/mindmap/ws/**
+            filters:
+              - PreserveHostHeader
+          # Mindmap Voice WebSocket Service (음성 채팅)
+          - id: mindmap-voice-websocket
+            uri: ${MINDMAP_WEBSOCKET_SERVICE_URL:ws://localhost:8084}
+            predicates:
+              - Path=/mindmap/voice/**
+            filters:
+              - PreserveHostHeader
+        # Mindmap Service 정적 라우팅
+          - id: mindmap-service
+            uri: ${MINDMAP_SERVICE_URL:http://localhost:8083}
+            predicates:
+              - Path=/mindmap/**
+        # Mindmap Service Swagger API Docs
+          - id: mindmap-service-swagger
+            uri: ${MINDMAP_SERVICE_URL:http://localhost:8083}
+            predicates:
+              - Path=/mindmap-service/v3/api-docs/**
+            filters:
+              - StripPrefix=1          # Mindmap Service 정적 라우팅
+          - id: mindmap-service
+            uri: ${MINDMAP_SERVICE_URL:http://localhost:8083}
+            predicates:
+              - Path=/mindmap/**
+        # Mindmap Service Swagger API Docs
+          - id: mindmap-service-swagger
+            uri: ${MINDMAP_SERVICE_URL:http://localhost:8083}
+            predicates:
+              - Path=/mindmap-service/v3/api-docs/**
+            filters:
+              - StripPrefix=1
+        # Trend Service 정적 라우팅
+          - id: trend-service
+            uri: ${TREND_SERVICE_URL:http://localhost:8085}
+            predicates:
+              - Path=/trend/**
+        # Trend Service Swagger API Docs
+          - id: trend-service-swagger
+            uri: ${TREND_SERVICE_URL:http://localhost:8085}
+            predicates:
+              - Path=/trend-service/v3/api-docs/**
+            filters:
+              - StripPrefix=1
+
+server:
+  port: 8080
+
+jwt:
+  secret: ${JWT_SECRET}
+
+gateway:
+  url: ${GATEWAY_URL:http://localhost:8080}
+
+services:
+  ai:
+    host: ${AI_SERVICE_HOST:localhost}
+    port: ${AI_SERVICE_PORT:8084}
+
+# SpringDoc Swagger 설정
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
+    urls:
+      - name: user-service
+        url: /user-service/v3/api-docs
+      - name: workspace-service
+        url: /workspace-service/v3/api-docs
+      - name: mindmap-service
+        url: /mindmap-service/v3/api-docs
+      - name: trend-service
+        url: /trend-service/v3/api-docs
+    urls-primary-name: user-service
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info   # 필요하면 '*' (운영에선 health 정도 권장)
+  endpoint:
+    health:
+      probes:
+        enabled: true          # /actuator/health/liveness, /readiness 자동 생성
+      show-details: never      # 운영 기본값. 필요시 when_authorized
