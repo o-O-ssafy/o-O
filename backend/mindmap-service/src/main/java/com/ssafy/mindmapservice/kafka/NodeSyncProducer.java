@@ -1,14 +1,12 @@
 package com.ssafy.mindmapservice.kafka;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.ssafy.mindmapservice.domain.MindmapNode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 
-import java.util.HashMap;
 import java.util.Map;
 
 @Slf4j
@@ -25,30 +23,25 @@ public class NodeSyncProducer {
     /**
      * 도메인 nodeId가 확정된 뒤, Node.js(Y.Doc) 쪽으로 동기화 이벤트 전송
      *
-     * @param clientKey  Y.Doc에서 쓰던 id (프론트 임시 키, event.get("id"))
-     * @param node       DB에 저장된 MindmapNode 엔티티
+     * @param nodeInfo  ADD 이벤트에서 만든 Map<String, Object>
+     *                  (workspaceId, clientKey, nodeId, parentId, ... 포함)
      */
-    public void sendNodeCreatedSync(String clientKey, MindmapNode node) {
+    public void sendNodeCreatedSync(Map<String, Object> nodeInfo) {
         try {
-            Map<String, Object> payload = new HashMap<>();
-            payload.put("operation", "ADD");
-            payload.put("workspaceId", node.getWorkspaceId());
-            payload.put("clientKey", clientKey);     // 🔥 Y.Doc key
-            payload.put("nodeId", node.getNodeId()); // 🔥 확정된 도메인 nodeId
-            payload.put("parentId", node.getParentId());
-            payload.put("keyword", node.getKeyword());
-            payload.put("memo", node.getMemo());
-            payload.put("x", node.getX());
-            payload.put("y", node.getY());
-            payload.put("color", node.getColor());
-            payload.put("analysisStatus", node.getAnalysisStatus().name());
-            payload.put("createdAt", node.getCreatedAt().toString());
-            payload.put("updatedAt", node.getUpdatedAt().toString());
+            // 🔥 혹시 operation 안 넣었으면 기본으로 ADD 세팅
+            nodeInfo.putIfAbsent("operation", "ADD");
 
-            String json = objectMapper.writeValueAsString(payload);
+            Object workspaceIdObj = nodeInfo.get("workspaceId");
+            if (workspaceIdObj == null) {
+                log.warn("[NodeSyncProducer] Missing workspaceId in nodeInfo: {}", nodeInfo);
+                return;
+            }
 
-            kafkaTemplate.send(nodeSyncTopic,
-                    String.valueOf(node.getWorkspaceId()), json);
+            String workspaceKey = String.valueOf(workspaceIdObj);
+
+            String json = objectMapper.writeValueAsString(nodeInfo);
+
+            kafkaTemplate.send(nodeSyncTopic, workspaceKey, json);
 
             log.info("[NodeSyncProducer] Sent node sync event: {}", json);
         } catch (Exception e) {

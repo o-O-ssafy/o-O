@@ -14,6 +14,7 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -38,8 +39,8 @@ public class NodeEventConsumer {
             BulkOperations bulkOps = mongoTemplate.bulkOps(BulkOperations.BulkMode.UNORDERED, MindmapNode.class);
 
             // ADD에서 sync 이벤트를 보내기 위해 잠시 모아둘 리스트
-            List<MindmapNode> createdNodes = new java.util.ArrayList<>();
-            List<String> clientKeys = new java.util.ArrayList<>();
+            List<Map<String, Object>> createdNodes = new java.util.ArrayList<>();
+
 
             for (Map<String, Object> event : events) {
                 String operation = (String) event.get("operation");
@@ -49,53 +50,60 @@ public class NodeEventConsumer {
 
                 switch (operation) {
                     case "ADD": {
-                        // 🔥 Y.Doc에서 쓰던 key (프론트 임시 id)
+
                         String clientKey = (String) event.get("id");
 
-                        Long generatedNodeId = sequenceGeneratorService.generateNextNodeId(workspaceId);
+                        Object nodeIdObj = event.get("nodeId");
+                        Long nodeId = getLongOrNull(nodeIdObj); // null 허용 버전
 
-                        Long parentId = safeGetLongOrNull(event.get("parentId"), "parentId", workspaceId);
-                        java.time.LocalDateTime now = java.time.LocalDateTime.now();
+                        if (nodeId == null) {
+                            // 🔥 여기서 시퀀스로 새로운 nodeId 생성
+                            nodeId = sequenceGeneratorService.generateNextNodeId(workspaceId);
+                            log.debug("Generated nodeId {} for ADD without nodeId. workspaceId={}", nodeId, workspaceId);
+                        }
 
-                        MindmapNode node = MindmapNode.builder()
-                                .workspaceId(workspaceId)
-                                .nodeId(generatedNodeId)
-                                .parentId(parentId)
-                                .type((String) event.get("type"))
-                                .keyword((String) event.get("keyword"))
-                                .memo((String) event.get("memo"))
-                                .x(getDouble(event.get("x")))
-                                .y(getDouble(event.get("y")))
-                                .color((String) event.get("color"))
-                                .analysisStatus(MindmapNode.AnalysisStatus.NONE)
-                                .createdAt(now)
-                                .updatedAt(now)
-                                .build();
+                        Object parentIdObj = event.get("parentId");
+                        Long parentId = safeGetLongOrNull(parentIdObj, "parentId", workspaceId);
 
-                        // Mongo upsert
+                        LocalDateTime now = LocalDateTime.now();
+
                         Query addQuery = new Query(
                                 Criteria.where("workspaceId").is(workspaceId)
-                                        .and("nodeId").is(generatedNodeId)
+                                        .and("nodeId").is(nodeId)
                         );
+
                         Update addUpdate = new Update()
                                 .set("parentId", parentId)
-                                .set("type", node.getType())
-                                .set("keyword", node.getKeyword())
-                                .set("memo", node.getMemo())
-                                .set("x", node.getX())
-                                .set("y", node.getY())
-                                .set("color", node.getColor())
-                                .set("analysisStatus", node.getAnalysisStatus())
+                                .set("type", event.get("type"))
+                                .set("keyword", event.get("keyword"))
+                                .set("memo", event.get("memo"))
+                                .set("x", getDouble(event.get("x")))
+                                .set("y", getDouble(event.get("y")))
+                                .set("color", event.get("color"))
+                                .set("analysisStatus", MindmapNode.AnalysisStatus.NONE)
                                 .set("updatedAt", now)
                                 .setOnInsert("workspaceId", workspaceId)
-                                .setOnInsert("nodeId", generatedNodeId)
+                                .setOnInsert("nodeId", nodeId)
                                 .setOnInsert("createdAt", now);
 
                         bulkOps.upsert(addQuery, addUpdate);
 
-                        // 🔥 나중에 Kafka로 다시 쏘기 위해 보관
-                        createdNodes.add(node);
-                        clientKeys.add(clientKey);
+                        Map<String, Object> newNodeInfo = new HashMap<>();
+                        newNodeInfo.put("workspaceId", workspaceId);
+                        newNodeInfo.put("clientKey", clientKey);
+                        newNodeInfo.put("nodeId", nodeId);
+                        newNodeInfo.put("parentId", parentId);
+                        newNodeInfo.put("type", event.get("type"));
+                        newNodeInfo.put("keyword", event.get("keyword"));
+                        newNodeInfo.put("memo", event.get("memo"));
+                        newNodeInfo.put("x", getDouble(event.get("x")));
+                        newNodeInfo.put("y", getDouble(event.get("y")));
+                        newNodeInfo.put("color", event.get("color"));
+                        newNodeInfo.put("analysisStatus", "NONE");
+                        newNodeInfo.put("updatedAt", now.toString());
+                        newNodeInfo.put("createdAt", now.toString());
+
+                        createdNodes.add(newNodeInfo);
 
                         break;
                     }
@@ -157,13 +165,10 @@ public class NodeEventConsumer {
             bulkOps.execute();
             log.info("Successfully processed {} node events", events.size());
 
-
-            // ADD된 노드들에 대해 Node.js(Y.Doc)로 sync 이벤트 발행
-            for (int i = 0; i < createdNodes.size(); i++) {
-                MindmapNode node = createdNodes.get(i);
-                String clientKey = clientKeys.get(i);
-                nodeSyncProducer.sendNodeCreatedSync(clientKey, node);
+            for (Map<String, Object> nodeInfo : createdNodes) {
+                nodeSyncProducer.sendNodeCreatedSync(nodeInfo);
             }
+
 
         } catch (Exception e) {
             log.error("Failed to process Kafka message", e);
