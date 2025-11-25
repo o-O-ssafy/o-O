@@ -649,6 +649,14 @@ public class NodeAiService {
             // 4) GPT 응답 → 엔티티 리스트 변환 (원본 노드 정보 섞어서 재구성)
             List<MindmapNode> rebuilt = parseRestructureJson(workspaceId, json, originalMap);
 
+            log.info("[RESTRUCTURE] workspaceId={}, originalSize={}, rebuiltSize={}",
+                    workspaceId, nodes.size(), rebuilt.size());
+
+            // rebuilt 비어있으면 무조건 실패 처리
+            if (rebuilt.isEmpty()) {
+                throw new IllegalStateException("재구성된 노드가 없습니다. (rebuilt is empty)");
+            }
+
             // 5) nodeId / parentId 등 검증
             validateNodeIds(nodes, rebuilt);
 
