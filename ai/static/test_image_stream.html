@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Image Analysis - Streaming Test</title>
+    <!-- D3.js for mindmap -->
+    <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Oxygen, Ubuntu, Cantarell, sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        padding: 20px;
+      }
+
+      .container {
+        max-width: 800px;
+        margin: 0 auto;
+        background: white;
+        border-radius: 20px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        overflow: hidden;
+      }
+
+      .header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 30px;
+        text-align: center;
+      }
+
+      .header h1 {
+        font-size: 28px;
+        margin-bottom: 10px;
+      }
+
+      .header p {
+        opacity: 0.9;
+        font-size: 14px;
+      }
+
+      .content {
+        padding: 30px;
+      }
+
+      .input-group {
+        margin-bottom: 20px;
+      }
+
+      .input-group label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 600;
+        color: #333;
+      }
+
+      .input-group input {
+        width: 100%;
+        padding: 12px 16px;
+        border: 2px solid #e0e0e0;
+        border-radius: 10px;
+        font-size: 14px;
+        transition: all 0.3s;
+      }
+
+      .input-group input:focus {
+        outline: none;
+        border-color: #667eea;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+      }
+
+      .btn {
+        width: 100%;
+        padding: 14px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        border-radius: 10px;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: transform 0.2s, box-shadow 0.2s;
+      }
+
+      .btn:hover:not(:disabled) {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+      }
+
+      .btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
+      .progress-section {
+        margin-top: 30px;
+        display: none;
+      }
+
+      .progress-section.active {
+        display: block;
+      }
+
+      .progress-bar-container {
+        background: #f0f0f0;
+        border-radius: 10px;
+        height: 30px;
+        overflow: hidden;
+        margin-bottom: 15px;
+        position: relative;
+      }
+
+      .progress-bar {
+        height: 100%;
+        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+        transition: width 0.3s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-weight: 600;
+        font-size: 12px;
+      }
+
+      .status-message {
+        padding: 12px 16px;
+        background: #f8f9fa;
+        border-left: 4px solid #667eea;
+        border-radius: 6px;
+        margin-bottom: 15px;
+        font-size: 14px;
+        color: #333;
+      }
+
+      .log-container {
+        background: #1e1e1e;
+        color: #d4d4d4;
+        padding: 20px;
+        border-radius: 10px;
+        max-height: 300px;
+        overflow-y: auto;
+        font-family: "Courier New", monospace;
+        font-size: 12px;
+        margin-top: 15px;
+      }
+
+      .log-entry {
+        padding: 4px 0;
+        border-bottom: 1px solid #333;
+      }
+
+      .log-entry:last-child {
+        border-bottom: none;
+      }
+
+      .result-section {
+        margin-top: 30px;
+        display: none;
+      }
+
+      .result-section.active {
+        display: block;
+      }
+
+      .result-card {
+        background: #f8f9fa;
+        padding: 20px;
+        border-radius: 10px;
+        margin-bottom: 15px;
+      }
+
+      .result-card h3 {
+        color: #667eea;
+        margin-bottom: 12px;
+        font-size: 18px;
+      }
+
+      .result-card p,
+      .result-card pre {
+        color: #333;
+        line-height: 1.6;
+        font-size: 14px;
+      }
+
+      .result-card pre {
+        background: white;
+        padding: 15px;
+        border-radius: 8px;
+        overflow-x: auto;
+        white-space: pre-wrap;
+      }
+
+      .error {
+        background: #fee;
+        border-left-color: #f44336;
+        color: #c62828;
+      }
+
+      /* 이미지 프리뷰 */
+      .image-preview {
+        width: 100%;
+        max-width: 400px;
+        margin: 20px auto;
+        border-radius: 10px;
+        overflow: hidden;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      }
+
+      .image-preview img {
+        width: 100%;
+        height: auto;
+        display: block;
+      }
+
+      /* 마인드맵 스타일 */
+      #mindmapContainer {
+        width: 100%;
+        height: 600px;
+        background: white;
+        border-radius: 10px;
+        border: 2px solid #e0e0e0;
+        overflow: hidden;
+        position: relative;
+      }
+
+      #mindmapSvg {
+        width: 100%;
+        height: 100%;
+        cursor: grab;
+      }
+
+      #mindmapSvg:active {
+        cursor: grabbing;
+      }
+
+      .node-rect {
+        fill: white;
+        stroke: #667eea;
+        stroke-width: 2;
+        rx: 8;
+        ry: 8;
+      }
+
+      .node-rect.root {
+        fill: #764ba2;
+      }
+
+      .node-keyword {
+        font-weight: 600;
+        fill: #333;
+        pointer-events: none;
+      }
+
+      .node-keyword.root {
+        fill: white;
+      }
+
+      .node-description {
+        font-size: 10px;
+        fill: #666;
+        pointer-events: none;
+      }
+
+      .node-description.root {
+        fill: rgba(255, 255, 255, 0.9);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>🖼️ Image Analysis</h1>
+        <p>Real-time Streaming API Test</p>
+      </div>
+
+      <div class="content">
+        <div class="input-group">
+          <label for="imageUrl">Image URL</label>
+          <input
+            type="text"
+            id="imageUrl"
+            placeholder="https://example.com/image.jpg"
+            value="https://picsum.photos/800/600"
+          />
+          <small
+            style="
+              color: #666;
+              font-size: 12px;
+              margin-top: 5px;
+              display: block;
+            "
+          >
+            분석할 이미지의 URL을 입력하세요
+          </small>
+        </div>
+
+        <div class="input-group">
+          <label for="userPrompt">User Prompt (Optional)</label>
+          <input
+            type="text"
+            id="userPrompt"
+            placeholder="예: 이 이미지에서 주요 객체들을 찾아서 설명해주세요"
+          />
+          <small
+            style="
+              color: #666;
+              font-size: 12px;
+              margin-top: 5px;
+              display: block;
+            "
+          >
+            이미지 분석 시 특별히 주목할 점이나 질문을 입력하세요
+          </small>
+        </div>
+
+        <button class="btn" id="analyzeBtn" onclick="startAnalysis()">
+          🚀 Start Analysis
+        </button>
+
+        <div class="progress-section" id="progressSection">
+          <div class="progress-bar-container">
+            <div class="progress-bar" id="progressBar">0%</div>
+          </div>
+          <div class="status-message" id="statusMessage">준비 중...</div>
+
+          <details>
+            <summary
+              style="cursor: pointer; margin-bottom: 10px; font-weight: 600"
+            >
+              📋 View Logs
+            </summary>
+            <div class="log-container" id="logContainer"></div>
+          </details>
+        </div>
+
+        <div class="result-section" id="resultSection">
+          <div class="result-card">
+            <h3>🖼️ Image Preview</h3>
+            <div class="image-preview" id="imagePreview">
+              <img id="previewImg" src="" alt="Analyzed Image" />
+            </div>
+          </div>
+
+          <div class="result-card">
+            <h3>🗺️ Mind Map</h3>
+            <div id="mindmapContainer">
+              <svg id="mindmapSvg"></svg>
+            </div>
+          </div>
+
+          <div class="result-card">
+            <h3>📊 Image Info</h3>
+            <p id="imageInfo"></p>
+          </div>
+
+          <div class="result-card">
+            <h3>🔍 Analysis Result</h3>
+            <pre id="analysisResult"></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      function renderMindMap(mindmapData) {
+        if (!mindmapData) return;
+
+        // MindMapNode를 D3 계층 구조로 변환
+        function convertToD3Hierarchy(node) {
+          const d3Node = {
+            name: node.keyword,
+            description: node.description,
+          };
+
+          if (node.children && node.children.length > 0) {
+            d3Node.children = node.children.map((child) =>
+              convertToD3Hierarchy(child)
+            );
+          }
+
+          return d3Node;
+        }
+
+        const hierarchyData = convertToD3Hierarchy(mindmapData);
+
+        // SVG 초기화
+        const svg = document.getElementById("mindmapSvg");
+        const container = document.getElementById("mindmapContainer");
+        svg.innerHTML = ""; // 기존 내용 제거
+
+        const width = container.clientWidth;
+        const height = container.clientHeight;
+
+        // D3 계층 구조 생성
+        const root = d3.hierarchy(hierarchyData);
+
+        // 트리의 전체 크기를 계산 (노드 개수 기반)
+        const nodeCount = root.descendants().length;
+        const treeHeight = Math.max(height * 3, nodeCount * 200);
+        const treeWidth = Math.max(width * 3, root.height * 600);
+
+        // 트리 레이아웃 생성 (넓은 공간 확보)
+        const treeLayout = d3
+          .tree()
+          .size([treeHeight, treeWidth])
+          .nodeSize([150, 300]);
+
+        treeLayout(root);
+
+        // SVG 설정
+        const svgElement = d3
+          .select(svg)
+          .attr("width", width)
+          .attr("height", height);
+
+        // 줌 및 팬 기능 추가
+        const zoom = d3
+          .zoom()
+          .scaleExtent([0.1, 3]) // 최소 10%, 최대 300% 줌
+          .on("zoom", (event) => {
+            g.attr("transform", event.transform);
+          });
+
+        svgElement.call(zoom);
+
+        // SVG 그룹 생성
+        const g = svgElement
+          .append("g")
+          .attr("transform", "translate(250, 150)");
+
+        // 링크 그리기
+        g.selectAll(".link")
+          .data(root.links())
+          .enter()
+          .append("path")
+          .attr("class", "link")
+          .attr("fill", "none")
+          .attr("stroke", "#667eea")
+          .attr("stroke-width", 2)
+          .attr(
+            "d",
+            d3
+              .linkHorizontal()
+              .x((d) => d.y)
+              .y((d) => d.x)
+          );
+
+        // 노드 그룹 생성
+        const nodes = g
+          .selectAll(".node")
+          .data(root.descendants())
+          .enter()
+          .append("g")
+          .attr("class", "node")
+          .attr("transform", (d) => `translate(${d.y},${d.x})`);
+
+        // 각 노드의 텍스트 크기 계산
+        nodes.each(function (d) {
+          const isRoot = d.depth === 0;
+          const keyword = d.data.name;
+          const description = d.data.description || "";
+
+          // 텍스트 길이 기반으로 사각형 크기 계산
+          const keywordLength = keyword.length;
+          const descLength = description.length;
+
+          // 설명을 여러 줄로 분할 (30자마다)
+          const descLines = [];
+          if (description) {
+            const maxCharsPerLine = 25;
+            for (let i = 0; i < descLength; i += maxCharsPerLine) {
+              descLines.push(description.substring(i, i + maxCharsPerLine));
+            }
+          }
+
+          d.descLines = descLines;
+          d.rectWidth = Math.max(
+            keywordLength * (isRoot ? 14 : 12) + 40,
+            Math.max(...descLines.map((line) => line.length * 7)) + 40,
+            isRoot ? 180 : 150
+          );
+          d.rectHeight = isRoot
+            ? 70 + descLines.length * 16
+            : 60 + descLines.length * 14;
+        });
+
+        // 노드 사각형 그리기
+        nodes
+          .append("rect")
+          .attr("class", (d) =>
+            d.depth === 0 ? "node-rect root" : "node-rect"
+          )
+          .attr("x", (d) => -d.rectWidth / 2)
+          .attr("y", (d) => -d.rectHeight / 2)
+          .attr("width", (d) => d.rectWidth)
+          .attr("height", (d) => d.rectHeight)
+          .style("cursor", "pointer");
+
+        // 키워드 텍스트 추가
+        nodes
+          .append("text")
+          .attr("class", (d) =>
+            d.depth === 0 ? "node-keyword root" : "node-keyword"
+          )
+          .attr("text-anchor", "middle")
+          .attr("dy", (d) => -d.rectHeight / 2 + (d.depth === 0 ? 25 : 20))
+          .style("font-size", (d) => (d.depth === 0 ? "14px" : "12px"))
+          .text((d) => d.data.name);
+
+        // 설명 텍스트 추가 (여러 줄)
+        nodes.each(function (d) {
+          const node = d3.select(this);
+          const isRoot = d.depth === 0;
+
+          d.descLines.forEach((line, i) => {
+            node
+              .append("text")
+              .attr(
+                "class",
+                isRoot ? "node-description root" : "node-description"
+              )
+              .attr("text-anchor", "middle")
+              .attr(
+                "dy",
+                -d.rectHeight / 2 + (isRoot ? 42 : 35) + i * (isRoot ? 14 : 12)
+              )
+              .text(line);
+          });
+        });
+
+        // 초기 줌을 중앙에 맞추기
+        const initialTransform = d3.zoomIdentity
+          .translate(width / 2 - 250, height / 2 - 150)
+          .scale(0.8);
+        svgElement.call(zoom.transform, initialTransform);
+      }
+
+      function addLog(message, type = "info") {
+        const logContainer = document.getElementById("logContainer");
+        const entry = document.createElement("div");
+        entry.className = "log-entry";
+        const timestamp = new Date().toLocaleTimeString();
+        entry.innerHTML = `<span style="color: #888">[${timestamp}]</span> ${message}`;
+        logContainer.appendChild(entry);
+        logContainer.scrollTop = logContainer.scrollHeight;
+      }
+
+      function updateProgress(progress, message) {
+        const progressBar = document.getElementById("progressBar");
+        const statusMessage = document.getElementById("statusMessage");
+
+        progressBar.style.width = progress + "%";
+        progressBar.textContent = progress + "%";
+        statusMessage.textContent = message;
+        statusMessage.className = "status-message";
+      }
+
+      function showError(message) {
+        const statusMessage = document.getElementById("statusMessage");
+        statusMessage.textContent = "❌ " + message;
+        statusMessage.className = "status-message error";
+        addLog(`ERROR: ${message}`, "error");
+      }
+
+      function displayResult(result) {
+        const resultSection = document.getElementById("resultSection");
+        resultSection.classList.add("active");
+
+        // Image Preview
+        document.getElementById("previewImg").src = result.image_url;
+
+        // Mind Map
+        if (result.mindmap) {
+          renderMindMap(result.mindmap);
+        } else {
+          console.error("마인드맵 데이터가 없습니다!");
+        }
+
+        // Image Info
+        if (result.image_info) {
+          document.getElementById("imageInfo").innerHTML = `
+                    <strong>Format:</strong> ${result.image_info.format}<br>
+                    <strong>Size:</strong> ${result.image_info.width} x ${result.image_info.height}<br>
+                    <strong>Mode:</strong> ${result.image_info.mode}
+                `;
+        }
+
+        // Analysis Result
+        if (result.analysis) {
+          document.getElementById("analysisResult").textContent =
+            result.analysis;
+        }
+      }
+
+      async function startAnalysis() {
+        const imageUrl = document.getElementById("imageUrl").value.trim();
+        const userPrompt = document.getElementById("userPrompt").value.trim();
+        const analyzeBtn = document.getElementById("analyzeBtn");
+        const progressSection = document.getElementById("progressSection");
+        const resultSection = document.getElementById("resultSection");
+
+        if (!imageUrl) {
+          alert("Please enter an Image URL");
+          return;
+        }
+
+        // Reset UI
+        analyzeBtn.disabled = true;
+        analyzeBtn.textContent = "⏳ Analyzing...";
+        progressSection.classList.add("active");
+        resultSection.classList.remove("active");
+        document.getElementById("logContainer").innerHTML = "";
+        updateProgress(0, "Connecting...");
+
+        addLog("Starting image analysis...");
+        addLog(`URL: ${imageUrl}`);
+        if (userPrompt) {
+          addLog(`User Prompt: ${userPrompt}`);
+        }
+
+        try {
+          // Use fetch with streaming
+          const requestBody = {
+            image_url: imageUrl,
+          };
+
+          // user_prompt가 있으면 추가
+          if (userPrompt) {
+            requestBody.user_prompt = userPrompt;
+          }
+
+          const response = await fetch("http://localhost:8000/analyze/image", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(requestBody),
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = ""; // 버퍼 추가
+
+          while (true) {
+            const { done, value } = await reader.read();
+
+            if (done) {
+              break;
+            }
+
+            // 청크를 버퍼에 추가
+            buffer += decoder.decode(value, { stream: true });
+
+            // 완전한 라인들만 처리
+            const lines = buffer.split("\n");
+
+            // 마지막 불완전한 라인은 버퍼에 남김
+            buffer = lines.pop() || "";
+
+            for (const line of lines) {
+              if (line.startsWith("data: ")) {
+                const jsonStr = line.substring(6).trim();
+                if (!jsonStr) continue;
+
+                try {
+                  const data = JSON.parse(jsonStr);
+
+                  // 서버로부터 받은 데이터 console에 출력
+                  console.log("📥 Server Response:", data);
+
+                  addLog(`[${data.status}] ${data.message || ""}`);
+
+                  if (data.progress !== undefined) {
+                    updateProgress(data.progress, data.message || data.status);
+                  }
+
+                  if (data.status === "completed" && data.result) {
+                    console.log("✅ Final Result:", data.result);
+                    displayResult(data.result);
+                    addLog("✅ Analysis completed successfully!");
+                  } else if (data.status === "failed") {
+                    console.error("❌ Error:", data.error);
+                    showError(data.error || "Unknown error");
+                  }
+                } catch (e) {
+                  console.error(
+                    "Failed to parse JSON:",
+                    e,
+                    "String:",
+                    jsonStr.substring(0, 200)
+                  );
+                }
+              }
+            }
+          }
+        } catch (error) {
+          showError(error.message);
+          console.error("Error:", error);
+        } finally {
+          analyzeBtn.disabled = false;
+          analyzeBtn.textContent = "🚀 Start Analysis";
+        }
+      }
+
+      // Allow Enter key to submit
+      document
+        .getElementById("imageUrl")
+        .addEventListener("keypress", function (e) {
+          if (e.key === "Enter") {
+            startAnalysis();
+          }
+        });
+    </script>
+  </body>
+</html>
