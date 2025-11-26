@@ -874,25 +874,20 @@ async function startServer() {
 
         const workspaceIdStr = workspaceId.toString();
 
-        // Y.Doc 가져오기
-        // const ydoc = ydocManager.docs.get(workspaceIdStr);
-        // if (!ydoc) {
-        //     logger.debug(`Workspace ${workspaceId} not in memory, skipping Y.Doc restructure`);
-        //
-        //     // 필요하면 여기서도 그냥 브로드캐스트만 해줄 수 있음
-        //     // (지금은 일단 완전 스킵)
-        //     return;
-        // }
-        //
-        // const metaMap = ydoc.getMap('meta');
-        // const nodesMap = ydoc.getMap('mindmap:nodes');
+        // 🔹 Y.Doc 가져오기 (있을 때만 반영)
+        const ydoc = ydocManager.docs.get(workspaceIdStr);
+        const hasYDoc = !!ydoc;
+        const metaMap = hasYDoc ? ydoc.getMap('meta') : null;
+        const nodesMap = hasYDoc ? ydoc.getMap('mindmap:nodes') : null;
 
-        // 1) LOCK
+        /** 1) LOCK **/
         if (eventType === 'LOCK') {
-            // if (!metaMap.get('locked')) {
-            //     metaMap.set('locked', true);
-            //     logger.info(`Workspace ${workspaceId} locked for restructure`);
-            // }
+            if (hasYDoc) {
+                // 🔥 LOCK도 origin='db-sync'로: Kafka 무시
+                ydoc.transact(() => {
+                    metaMap.set('locked', true);
+                }, 'db-sync');
+            }
 
             const payload = {
                 type: 'restructure_lock',
@@ -909,7 +904,7 @@ async function startServer() {
             return;
         }
 
-        // 2) APPLY
+        /** 2) APPLY **/
         if (eventType === 'APPLY') {
             if (!Array.isArray(nodes)) {
                 logger.warn('APPLY event without nodes array', { data });
@@ -921,62 +916,68 @@ async function startServer() {
                 nodeCount: nodes.length,
             });
 
-            // let success = false;
-            //
-            // try {
-            //     // Yjs 트랜잭션으로 묶기 (선택 사항이지만 있으면 더 안전)
-            //     ydoc.transact(() => {
-            //         nodesMap.clear();
-            //
-            //         for (const node of nodes) {
-            //             nodesMap.set(String(node.nodeId), {
-            //                 nodeId: node.nodeId,
-            //                 parentId: node.parentId ?? null,
-            //                 keyword: node.keyword,
-            //                 memo: node.memo,
-            //                 type: node.type || 'text',
-            //                 color: node.color,
-            //                 x: node.x ?? null,
-            //                 y: node.y ?? null,
-            //             });
-            //         }
-            //
-            //         metaMap.set('locked', false);
-            //     });
-            //
-            //     success = true;
-            //
-            //     logger.info(
-            //         `Workspace ${workspaceId} Y.Doc restructured with ${nodes.length} nodes`,
-            //     );
-            // } catch (error) {
-            //     logger.error(
-            //         `Failed to apply restructure update to Y.Doc for workspace ${workspaceId}`,
-            //         { error: error.message },
-            //     );
-            // }
-            //
-            // if (!success) {
-            //     // 실패: 프론트에 실패 알리고 lock 풀어줄지 말지 결정
-            //     // 여기서는 일단 풀어주는 버전 예시
-            //     metaMap.set('locked', false);
-            //
-            //     const failPayload = {
-            //         type: 'restructure_failed',
-            //         workspaceId: workspaceIdStr,
-            //     };
-            //
-            //     const sentCount = sendToWorkspace(workspaceIdStr, failPayload);
-            //
-            //     logger.warn('[Restructure] APPLY failed, broadcasted FAIL', {
-            //         workspaceId: workspaceIdStr,
-            //         sentCount,
-            //     });
-            //
-            //     return;
-            // }
+            let success = true;
 
-            // 성공한 경우에만 APPLY 브로드캐스트
+            if (hasYDoc) {
+                try {
+                    /**
+                     * 🔥 핵심: origin='db-sync'
+                     * - observer에서 Kafka로 절대 전송되지 않도록 함
+                     * - 기존 노드 clear + 새 노드 전체 세팅
+                     */
+                    ydoc.transact(() => {
+                        nodesMap.clear();
+
+                        for (const node of nodes) {
+                            nodesMap.set(String(node.nodeId), {
+                                nodeId: node.nodeId,
+                                parentId: node.parentId ?? null,
+                                keyword: node.keyword,
+                                memo: node.memo,
+                                type: node.type || 'text',
+                                color: node.color,
+                                x: node.x ?? null,
+                                y: node.y ?? null,
+                            });
+                        }
+
+                        // 🔓 잠금 해제
+                        metaMap.set('locked', false);
+                    }, 'db-sync');
+
+                    logger.info(
+                        `[Restructure] Workspace ${workspaceId} Y.Doc updated with ${nodes.length} nodes`,
+                    );
+                } catch (error) {
+                    success = false;
+                    logger.error(
+                        `[Restructure] Failed to update Y.Doc during APPLY for workspace ${workspaceId}`,
+                        { error: error.message },
+                    );
+                }
+            } else {
+                logger.warn(
+                    `[Restructure] APPLY received but Y.Doc not loaded for workspace ${workspaceId}`,
+                );
+            }
+
+            if (!success) {
+                const failPayload = {
+                    type: 'restructure_failed',
+                    workspaceId: workspaceIdStr,
+                };
+
+                const sentCount = sendToWorkspace(workspaceIdStr, failPayload);
+
+                logger.warn('[Restructure] APPLY failed, broadcasted FAIL', {
+                    workspaceId: workspaceIdStr,
+                    sentCount,
+                });
+
+                return;
+            }
+
+            // 🔹 프론트에 "정리 완료" 알림
             const payload = {
                 type: 'restructure_apply',
                 workspaceId: workspaceIdStr,
@@ -986,19 +987,17 @@ async function startServer() {
             const sentCount = sendToWorkspace(workspaceIdStr, payload);
 
             logger.info(
-                `[Restructure] APPLY broadcasted via WebSocket (unlock) for workspace ${workspaceIdStr}`,
-                {
-                    nodeCount: nodes.length,
-                    sentCount,
-                },
+                `[Restructure] APPLY broadcasted via WebSocket (unlock) workspace=${workspaceIdStr}`,
+                { nodeCount: nodes.length, sentCount },
             );
 
             return;
         }
 
-        // 3) FAIL 같은 추가 타입 처리도 여기에 추가 가능
+        /** 3) 기타 타입 **/
         logger.warn('Unknown restructure eventType', { eventType, data });
     });
+
 
 
 
