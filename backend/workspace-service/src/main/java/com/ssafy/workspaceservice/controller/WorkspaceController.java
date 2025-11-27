@@ -390,7 +390,6 @@ public class WorkspaceController {
             summary = "워크스페이스 테마 변경",
             description = """
                     워크스페이스의 테마를 변경합니다.
-                    MAINTAINER 권한이 필요합니다.
                     """
     )
     @ApiResponses({
