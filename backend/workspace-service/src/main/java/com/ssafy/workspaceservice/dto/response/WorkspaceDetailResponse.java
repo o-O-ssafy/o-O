@@ -1,6 +1,7 @@
 package com.ssafy.workspaceservice.dto.response;
 
 import com.ssafy.workspaceservice.entity.Workspace;
+import com.ssafy.workspaceservice.enums.WorkspaceTheme;
 import com.ssafy.workspaceservice.enums.WorkspaceType;
 import com.ssafy.workspaceservice.enums.WorkspaceVisibility;
 
@@ -8,6 +9,7 @@ import java.time.LocalDateTime;
 
 public record WorkspaceDetailResponse(
         Long id,
+        WorkspaceTheme theme,
         WorkspaceType type,
         WorkspaceVisibility visibility,
         String title,
@@ -27,6 +29,7 @@ public record WorkspaceDetailResponse(
     ) {
         return new WorkspaceDetailResponse(
                 w.getId(),
+                w.getTheme(),
                 w.getType(),
                 w.getVisibility(),
                 w.getTitle(),
