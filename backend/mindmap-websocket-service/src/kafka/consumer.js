@@ -16,6 +16,7 @@
  * 6. 모든 클라이언트 자동 동기화
  */
 
+
 import { Kafka } from 'kafkajs';
 import { logger } from '../utils/logger.js';
 import { ydocManager } from '../yjs/ydoc-manager.js';
@@ -228,6 +229,55 @@ class KafkaConsumerService {
         nodeCount,
         nodeKeywords: nodes.map(n => n.keyword),
       });
+
+      const workspaceIdStr = workspaceId.toString();
+      const ydoc = ydocManager.docs.get(workspaceIdStr);
+
+      if (ydoc) {
+          const nodesMap = ydoc.getMap('mindmap:nodes');
+
+          try {
+              // 🔥 origin='db-sync' → observer에서 Kafka로 다시 안 나가게
+              ydoc.transact(() => {
+                  for (const node of nodes) {
+                      // 여기서부터는 MindmapNode → CreatedNodeInfo → JSON 형태
+                      // 서버에서 id도 같이 보내주고 있다고 전제
+                      const key = node.id ?? String(node.nodeId);
+
+                      nodesMap.set(key, {
+                          id: node.id ?? key,
+                          nodeId: node.nodeId,
+                          workspaceId: node.workspaceId ?? workspaceId,
+                          parentId: node.parentId ?? null,
+                          type: node.type || 'text',
+                          keyword: node.keyword,
+                          memo: node.memo ?? null,
+                          color: node.color,
+                          x: node.x ?? null,
+                          y: node.y ?? null,
+                          analysisStatus: node.analysisStatus ?? 'NONE',
+                          createdAt: node.createdAt ?? null,
+                          updatedAt: node.updatedAt ?? null,
+                      });
+                  }
+              }, 'db-sync');
+
+              logger.info('[NodeUpdate] Applied created nodes to Y.Doc', {
+                  workspaceId: workspaceIdStr,
+                  addedCount: nodes.length,
+              });
+          } catch (err) {
+              logger.error('[NodeUpdate] Failed to apply created nodes to Y.Doc', {
+                  workspaceId: workspaceIdStr,
+                  error: err.message,
+              });
+          }
+      } else {
+          logger.debug(
+              `Workspace ${workspaceId} not in memory when handling created nodes, Y.Doc update skipped`,
+          );
+      }
+
 
       // 등록된 핸들러 호출 (생성된 노드 전체 정보 포함)
       if (this.onInitialCreateDone) {
