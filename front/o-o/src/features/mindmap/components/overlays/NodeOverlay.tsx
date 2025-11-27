@@ -437,7 +437,12 @@ function NodeOverlay({
             transformOrigin: "center center",
           }}
         >
-          <CustomTooltip content={isHovered && memo && !isDragging ? memo : ""}>
+          <CustomTooltip
+              content={isHovered && memo && !isDragging ? memo : ""}
+              screenX={x}
+              screenY={y}
+              nodeRadius={96 * zoom}
+            >
             <div
               style={{
                 transform: `scale(${zoom})`,
