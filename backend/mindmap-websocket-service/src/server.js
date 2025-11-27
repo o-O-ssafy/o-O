@@ -972,17 +972,24 @@ async function startServer() {
                      */
                     ydoc.transact(() => {
                         nodesMap.clear();
-
                         for (const node of nodes) {
-                            nodesMap.set(String(node.nodeId), {
+
+                            const key = String(node.id);
+
+                            nodesMap.set(key, {
+                                id: key,
                                 nodeId: node.nodeId,
-                                parentId: node.parentId ?? null,
+                                workspaceId: node.workspaceId,
                                 keyword: node.keyword,
-                                memo: node.memo,
-                                type: node.type || 'text',
-                                color: node.color,
                                 x: node.x ?? null,
                                 y: node.y ?? null,
+                                color: node.color,
+                                parentId: node.parentId ?? null,
+                                memo: node.memo ?? null,
+                                type: node.type || 'text',
+                                analysisStatus: node.analysisStatus || 'NONE',
+                                createdAt: node.createdAt || null,
+                                updatedAt: node.updatedAt || null,
                             });
                         }
 
