@@ -13,6 +13,7 @@
  */
 
 import { Awareness } from 'y-protocols/awareness';
+import * as awarenessProtocol from 'y-protocols/awareness';
 import { logger } from '../utils/logger.js';
 
 class AwarenessManager {
@@ -20,6 +21,12 @@ class AwarenessManager {
     // 워크스페이스ID -> Awareness 인스턴스 매핑
     // 각 워크스페이스마다 독립적인 Awareness 관리
     this.awarenessInstances = new Map();
+    this.CLIENT_TIMEOUT_MS = 10_000;
+
+    setInterval(() => {
+        this.cleanupStaleClients();
+    }, 5_000); // 5초마다 검사
+
     logger.info('AwarenessManager initialized');
   }
 
@@ -184,6 +191,38 @@ class AwarenessManager {
 
     return stats;
   }
+
+  /**
+   * 오래동안 갱신되지 않은 클라이언트 제거 (timeout 처리)
+   */
+  cleanupStaleClients() {
+      const now = Date.now();
+
+      for (const [workspaceId, awareness] of this.awarenessInstances.entries()) {
+          const staleClientIds = [];
+
+          // awareness.meta: clientId -> { clock, lastUpdated }
+          awareness.meta.forEach((meta, clientId) => {
+              if (!meta || typeof meta.lastUpdated !== 'number') return;
+
+              const diff = now - meta.lastUpdated;
+              if (diff > this.CLIENT_TIMEOUT_MS) {
+                  staleClientIds.push(clientId);
+              }
+          });
+
+          if (staleClientIds.length > 0) {
+              logger.info(
+                  `[AwarenessManager] Workspace ${workspaceId} - removing ${staleClientIds.length} stale client(s) due to timeout`,
+                  { staleClientIds }
+              );
+
+              // Yjs 프로토콜에 맞게 상태 제거
+              awarenessProtocol.removeAwarenessStates(awareness, staleClientIds, 'timeout');
+          }
+      }
+  }
+
 }
 
 // Export singleton instance
