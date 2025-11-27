@@ -699,7 +699,7 @@ public class NodeAiService {
 
       🎯 요구사항
       1. nodeId=1 은 ROOT 이며 절대 변경/삭제/이동 금지
-      2. keyword + memo가 의미적으로 중복이면 병합, nodeId가 작은 것을 남기기
+      2. keyword + memo가 의미적으로 중복이거나 같으면 병합, nodeId가 큰 것을 삭제하고 작은 것을 남기기
       3. 계층 구조를 semantic 기준으로 재배치
       4. parentId 는 존재하는 nodeId 중 하나여야 함
       5. 출력은 반드시 JSON array 로만, 설명 금지
