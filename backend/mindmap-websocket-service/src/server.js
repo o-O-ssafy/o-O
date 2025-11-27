@@ -731,18 +731,26 @@ function handleYjsConnection(conn, req, url) {
           });
       }
 
-      // 1) 바이너리면 → Yjs sync 메시지라고 보고, 그냥 통과 (우리는 관여 X)
-      if (isBuffer) {
-          // setupWSConnection 쪽 리스너가 따로 처리하니까 여기선 손 안댐
-          return;
-      }
-
       // 2) 문자열이면 → 커스텀 JSON 메시지로 시도
       let msgString;
       try {
-          msgString = msg.toString();
+        if (isBuffer) {
+            msgString = msg.toString('utf8');
+        } else if (isArrayBuffer) {
+            const buf = Buffer.from(new Uint8Array(msg));
+            msgString = buf.toString('utf8');
+        } else if (typeof msg === 'string') {
+            msgString = msg;
+        } else {
+            // 알려지지 않은 타입이면 무시
+            return;
+        }
       } catch (e) {
-          return;
+        logger.warn('[YJS] msg.toString() failed', {
+            workspaceId,
+            error: e.message,
+        });
+        return;
       }
 
       try {
