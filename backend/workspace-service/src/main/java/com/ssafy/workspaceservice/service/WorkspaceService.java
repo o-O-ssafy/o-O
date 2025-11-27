@@ -495,4 +495,20 @@ public class WorkspaceService {
             return List.of();
         }
     }
+
+
+    public void changeTheme(Long workspaceId, Long requestUserId, WorkspaceTheme newTheme) {
+        // 1. 워크스페이스 존재 확인
+        Workspace workspace = workspaceRepository.findById(workspaceId)
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.WORKSPACE_NOT_FOUND));
+
+        // 2. 요청자 멤버 여부 및 권한 확인
+        WorkspaceMember requestMember = workspaceMemberRepository
+                .findByWorkspaceIdAndUserId(workspaceId, requestUserId)
+                .orElseThrow(() -> new ForbiddenException(ErrorCode.FORBIDDEN_NOT_MEMBER));
+
+        // 3. 테마 변경
+        workspace.changeTheme(newTheme); // 엔티티에 이 메서드 있어야 함
+        // @Transactional + 영속 상태 → save() 호출 없이 더티 체킹으로 반영
+    }
 }

@@ -3,6 +3,7 @@ package com.ssafy.workspaceservice.controller;
 import com.ssafy.workspaceservice.dto.request.*;
 import com.ssafy.workspaceservice.dto.response.*;
 import com.ssafy.workspaceservice.enums.WorkspaceRole;
+import com.ssafy.workspaceservice.enums.WorkspaceTheme;
 import com.ssafy.workspaceservice.enums.WorkspaceVisibility;
 import com.ssafy.workspaceservice.service.WorkspaceService;
 import com.ssafy.workspaceservice.service.WorkspaceThumbnailService;
@@ -383,4 +384,53 @@ public class WorkspaceController {
         workspaceThumbnailService.uploadThumbnail(workspaceId, file);
         return ResponseEntity.noContent().build();
     }
+
+
+    @Operation(
+            summary = "워크스페이스 테마 변경",
+            description = """
+                    워크스페이스의 테마를 변경합니다.
+                    MAINTAINER 권한이 필요합니다.
+                    """
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "변경 성공"),
+            @ApiResponse(responseCode = "403", description = "권한 없음"),
+            @ApiResponse(responseCode = "404", description = "워크스페이스를 찾을 수 없음")
+    })
+    @PatchMapping("/{workspaceId}/theme")
+    public ResponseEntity<Void> changeTheme(
+            @Parameter(description = "워크스페이스 ID", required = true, example = "123")
+            @PathVariable Long workspaceId,
+
+            @Parameter(hidden = true)
+            @RequestHeader("X-USER-ID") Long userId,
+
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                    description = "변경할 테마 정보",
+                    required = true,
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = WorkspaceThemeChangeRequest.class),
+                            examples = @ExampleObject(
+                                    value = """
+                                            {
+                                              "theme": "PASTEL"
+                                            }
+                                            """
+                            )
+                    )
+            )
+            @RequestBody @Valid WorkspaceThemeChangeRequest request
+    ) {
+        log.info("PATCH /workspace/{}/theme - Changing theme for workspaceId: {}, userId: {}, newTheme: {}",
+                workspaceId, workspaceId, userId, request.theme());
+
+        WorkspaceTheme newTheme = WorkspaceTheme.valueOf(request.theme().toUpperCase());
+        workspaceService.changeTheme(workspaceId, userId, newTheme);
+
+        return ResponseEntity.ok().build();
+    }
+
+
 }

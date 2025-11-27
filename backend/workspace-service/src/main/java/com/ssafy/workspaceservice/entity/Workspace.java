@@ -56,5 +56,8 @@ public class Workspace {
     public void changeThumbnail(String thumbnail) { this.thumbnail = thumbnail; }
     public void changeTitle(String title) {this.title = title;}
     public void changeType(WorkspaceType type) { this.type = type; }
+    public void changeTheme(WorkspaceTheme theme) {
+        this.theme = theme;
+    }
 
 }
