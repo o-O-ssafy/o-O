@@ -389,23 +389,10 @@ class KafkaConsumerService {
    * }
    */
   handleNodeSync(data) {
-      const {
-          operation,
-          workspaceId,
-          clientKey,
-          nodeId,
-          parentId,
-          type,
-          keyword,
-          memo,
-          x,
-          y,
-          color,
-          _id
-      } = data;
+      const { workspaceId, clientKey, _id, nodeId, ...nodeData } = data;
 
-      if (!workspaceId || !clientKey || !nodeId) {
-          logger.warn('[NodeSync] Invalid payload (missing workspaceId/clientKey/nodeId)', { data });
+      if (!workspaceId || !_id || !nodeId) {
+          logger.warn('[NodeSync] Invalid payload (missing workspaceId/_id/nodeId)', { data });
           return;
       }
 
@@ -417,43 +404,37 @@ class KafkaConsumerService {
       }
 
       const nodesMap = ydoc.getMap('mindmap:nodes');
-      const prev = nodesMap.get(clientKey);
-
-      if (!prev) {
-          logger.warn('[NodeSync] No local node found for clientKey', {
-              workspaceId,
-              clientKey,
-              nodeId,
-          });
-          return;
-      }
 
       try {
           // 🔥 db-sync origin으로 transact → observe에서 다시 Kafka로 안 나가게 막을 수 있음
+          // ✅ 올바른 방법: 임시 노드 삭제 + 영속 노드 추가
           ydoc.transact(() => {
-              nodesMap.set(clientKey, {
-                  ...prev,
-                  id: _id,
-                  nodeId,                           // 서버에서 확정된 도메인 nodeId
-                  parentId: parentId ?? prev.parentId,
-                  type: type ?? prev.type,
-                  keyword: keyword ?? prev.keyword,
-                  memo: memo ?? prev.memo,
-                  x: x ?? prev.x,
-                  y: y ?? prev.y,
-                  color: color ?? prev.color,
+              // 1. 임시 노드가 있으면 삭제
+              if (clientKey && nodesMap.has(clientKey)) {
+                  nodesMap.delete(clientKey);
+                  logger.debug(`[NodeSync] Deleted temp node: ${clientKey}`);
+              }
+
+              // 2. 영속 노드 추가/업데이트 (key와 id가 동일!)
+              const persistentNode = {
+                  id: _id.toString(),
+                  nodeId: nodeId,
+                  ...nodeData
+              };
+
+              nodesMap.set(_id.toString(), persistentNode);
+              logger.info(`[NodeSync] Synced persistent node: ${_id}, nodeId=${nodeId}`, {
+                  workspaceId,
+                  oldKey: clientKey || 'none',
+                  newKey: _id,
               });
           }, 'db-sync');
 
-          logger.info('[NodeSync] Synced nodeId from DB to Y.Doc', {
-              workspaceId,
-              clientKey,
-              nodeId,
-          });
       } catch (error) {
           logger.error('[NodeSync] Failed to apply sync to Y.Doc', {
               workspaceId,
               clientKey,
+              _id,
               nodeId,
               error: error.message,
           });
