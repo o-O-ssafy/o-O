@@ -639,6 +639,51 @@ function handleYjsConnection(conn, req, url) {
   // Awareness: 커서 위치, 사용자 정보 등 임시 상태 공유
   const awareness = awarenessManager.getAwareness(workspaceId, ydoc);
 
+  const originalSend = conn.send;
+
+  conn.send = function patchedSend(data, ...args) {
+      try {
+          const isBuffer = Buffer.isBuffer(data) || data instanceof Uint8Array;
+          const isArrayBuffer = data instanceof ArrayBuffer;
+
+          if (isBuffer || isArrayBuffer) {
+              const size = isBuffer
+                  ? data.length
+                  : isArrayBuffer
+                      ? data.byteLength
+                      : undefined;
+
+              logger.info('[YJS][OUTBOUND] Binary WS message sending', {
+                  workspaceId,
+                  isBuffer,
+                  isArrayBuffer,
+                  size,
+              });
+
+            // 원하면 hex 프리뷰도 찍기 (짧게만)
+            // const buf = Buffer.isBuffer(data)
+            //   ? data
+            //   : Buffer.from(new Uint8Array(data as ArrayBuffer));
+            // logger.debug('[YJS][OUTBOUND] hexPreview', buf.toString('hex').slice(0, 80));
+          } else if (typeof data === 'string') {
+              // 이건 우리가 보내는 JSON들 (sendToWorkspace / sendToUser 등)
+              logger.debug('[WS][OUTBOUND_JSON]', {
+                  workspaceId,
+                  size: data.length,
+                  preview: data.slice(0, 120),
+              });
+          }
+      } catch (e) {
+          logger.error('[WS][OUTBOUND_LOG_ERROR]', {
+              workspaceId,
+              error: e.message,
+          });
+      }
+
+      // 실제 전송
+      return originalSend.call(this, data, ...args);
+  };
+
   const t2 = Date.now();
 
   logger.info(`[YJS] Setting up Y.js sync for workspace=${workspaceId}`);
