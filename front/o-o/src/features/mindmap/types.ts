@@ -24,8 +24,9 @@ export type NodeAddInputProps = Readonly<{
 // ColorPalette.tsx
 export type ColorPaletteProps = Readonly<{
   open: boolean;
+  currentTheme?: string;  // ColorThemeName: 현재 워크스페이스 테마
   onColorChange?: (color: string) => void;
-  onApplyTheme?: (colors: string[]) => void;
+  onApplyTheme?: (colors: string[], themeName: string) => void;  // themeName 추가
   onClose?: () => void;
   value?: string;
   className?: string;
@@ -41,10 +42,11 @@ export type CytoscapeCanvasProps = Readonly<{
   mode: MindmapMode;
   analyzeSelection: string[];
   selectedNodeId: string | null;
+  currentTheme?: string;  // ColorThemeName: 현재 워크스페이스 테마
   isReadOnly?: boolean;
   onNodeSelect: (nodeId: string) => void;
   onNodeUnselect: () => void;
-  onApplyTheme: (colors: string[]) => void;
+  onApplyTheme: (colors: string[], themeName: string) => void;  // themeName 추가
   onDeleteNode: (payload: DeleteNodePayload) => void;
   onEditNode: (payload: EditNodePayload) => void;
   onBatchNodePositionChange?: (
@@ -78,10 +80,11 @@ export type NodeOverlayProps = {
   isLoadingRecommendation?: boolean; // 추천 로딩 상태
   setIsLoadingRecommendation?: (isLoading: boolean) => void; // 로딩 상태 설정 함수
   workspaceId?: string; // 워크스페이스 ID (AI 분석 요청에 필요)
+  currentTheme?: string;  // ColorThemeName: 현재 워크스페이스 테마
   isReadOnly?: boolean;
   onSelect: () => void;
   onDeselect: () => void;
-  onApplyTheme: (colors: string[]) => void;
+  onApplyTheme: (colors: string[], themeName: string) => void;  // themeName 추가
   onDeleteNode: (payload: DeleteNodePayload) => void;
   onEditNode: (payload: EditNodePayload) => void;
   onCreateChildNode: (request: ChildNodeRequest) => void;
@@ -117,7 +120,8 @@ export type RadialToolGroupProps = Readonly<{
   onPaletteClose?: () => void;
   onRecommend?: () => void;
   onColorChange?: (color: string) => void;
-  onApplyTheme?: (colors: string[]) => void;
+  onApplyTheme?: (colors: string[], themeName: string) => void;  // themeName 추가
+  currentTheme?: string;  // ColorThemeName: 현재 워크스페이스 테마
 }>;
 
 // RecommendNodeOverlay.tsx

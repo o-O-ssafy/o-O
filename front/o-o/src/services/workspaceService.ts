@@ -6,8 +6,10 @@ import type {
   JoinWorkspaceResponseDTO,
   UpdateMemberRoleRequestDTO,
   UpdateWorkspaceVisibilityRequestDTO,
+  UpdateWorkspaceThemeRequestDTO,
   WorkspaceRole,
   WorkspaceVisibility,
+  WorkspaceTheme,
 } from "@/services/dto/workspace.dto";
 import { buildWorkspacePayload } from "@/shared/utils/buildPayloadUtil";
 
@@ -54,4 +56,13 @@ export const updateWorkspaceVisibility = async (
 ) => {
   const requestBody: UpdateWorkspaceVisibilityRequestDTO = { visibility };
   await apiClient.patch(`/workspace/${workspaceId}/visibility`, requestBody);
+};
+
+// PATCH /workspace/{workspaceId}/theme
+export const updateWorkspaceTheme = async (
+  workspaceId: string | number,
+  theme: WorkspaceTheme
+) => {
+  const requestBody: UpdateWorkspaceThemeRequestDTO = { theme };
+  await apiClient.patch(`/workspace/${workspaceId}/theme`, requestBody);
 };

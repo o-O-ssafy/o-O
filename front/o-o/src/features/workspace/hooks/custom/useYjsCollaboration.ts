@@ -427,54 +427,11 @@ export function useYjsCollaboration(
             // add-idea-done인 경우: 로딩 해제는 position calculation 완료 후 (useCollaborativeNodes에서 처리)
             // 노드들이 0,0에 모였다가 → calculate position → 진짜 position 렌더링 → 로딩 해제
           }
-          // Ask Popo 재구조화 완료 - Y.Map 완전 교체
-          else if (data.type === "restructure_apply" && data.nodes && Array.isArray(data.nodes)) {
-            console.log(`🔄 restructure_apply: replacing entire Y.Map with`, data.nodes.length, "nodes");
-
-            const nodesMap = client.doc.getMap<NodeData>(NODES_YMAP_KEY);
-
-            // DTO를 NodeData로 변환 및 parentId 타입 정규화
-            const nodeDatas = data.nodes.map((nodeDto: any) => {
-              const nodeData = mapDtoToNodeData(nodeDto);
-              return {
-                ...nodeData,
-                // parentId를 숫자로 정규화 (null 제외)
-                parentId: nodeData.parentId === null ? null : Number(nodeData.parentId),
-              };
-            });
-
-            // position 계산 필요 여부 확인
-            const { calculateNodePositions } = await import("./useCollaborativeNodes");
-            const processedNodes = await calculateNodePositions(nodeDatas);
-
-            // Y.Map 완전 교체 (기존 노드 전부 삭제 후 새로운 노드로 재구성)
-            const posByNodeId = new Map<number, { x: number | null; y: number | null }>();
-            for (const node of processedNodes) {
-              if (node.nodeId == null) continue;
-              posByNodeId.set(Number(node.nodeId), {
-                x: node.x ?? null,
-                y: node.y ?? null,
-              });
-            }
-
-            // 3) Y.Map 전체를 돌면서, 값 안의 nodeId 기준으로 x,y 갱신
-            safeTransact(() => {
-              nodesMap.forEach((existing, key) => {
-                const nodeId = existing.nodeId;
-                if (nodeId == null) return;
-
-                const pos = posByNodeId.get(Number(nodeId));
-                if (!pos) return;
-
-                nodesMap.set(key, {
-                  ...existing,
-                  x: pos.x ?? existing.x,
-                  y: pos.y ?? existing.y,
-                });
-              });
-            }, "remote");
-
-            console.log(`✅ restructure_apply: Y.Map completely replaced with ${processedNodes.length} nodes`);
+          // Ask Popo 재구조화 완료
+          // 서버가 Y.Doc을 직접 수정하고 바이너리로 동기화해줌
+          // 클라이언트는 로딩 해제만 담당 (Y.Map은 바이너리 sync로 자동 반영)
+          else if (data.type === "restructure_apply") {
+            console.log(`🔄 restructure_apply: 서버 Y.Doc 바이너리 동기화로 자동 반영`);
 
             // 재구조화 완료 - 로딩 해제
             setIsLoading(false);
@@ -543,6 +500,56 @@ export function useYjsCollaboration(
     const awareness = collab.client.provider.awareness;
     if (!awareness) return;
 
+    // 🔍 Awareness 변경 로그 리스너
+    const handleAwarenessChange = (changes: { added: number[]; updated: number[]; removed: number[] }) => {
+    //   const selfId = awareness.clientID;
+    //   const states = awareness.getStates();
+
+      // console.group("🌐 [Awareness] 상태 변경 감지");
+      // console.log("├── 📌 내 clientID:", selfId);
+      // console.log("├── 📊 변경 내역:", {
+      //   추가됨: changes.added,
+      //   업데이트됨: changes.updated,
+      //   제거됨: changes.removed,
+      // });
+      // console.log("├── 👥 전체 참가자 수:", states.size);
+      // console.log("└── 📋 모든 참가자 상태:");
+
+      // states.forEach((state, clientId) => {
+      //   const isMe = clientId === selfId;
+      //   const prefix = isMe ? "    ├── 👤 [나]" : "    └── 👻 [다른 사용자]";
+
+      //   console.group(`${prefix} clientID: ${clientId}`);
+      //   console.log("    ├── 🧑 사용자 정보:", {
+      //     userId: state?.user?.userId,
+      //     name: state?.user?.name,
+      //     email: state?.user?.email,
+      //     color: state?.user?.color,
+      //     role: state?.user?.role,
+      //     profileImage: state?.user?.profileImage ? "있음" : "없음",
+      //   });
+      //   console.log("    ├── 🖱️ 커서 위치:", state?.cursor ? {
+      //     x: state.cursor.x?.toFixed(2),
+      //     y: state.cursor.y?.toFixed(2),
+      //     color: state.cursor.color,
+      //   } : "없음");
+      //   console.log("    ├── 💬 채팅 상태:", state?.chat ? {
+      //     isTyping: state.chat.isTyping,
+      //     currentText: state.chat.currentText?.substring(0, 50) + (state.chat.currentText?.length > 50 ? "..." : ""),
+      //     timestamp: state.chat.timestamp ? new Date(state.chat.timestamp).toLocaleTimeString() : "없음",
+      //   } : "없음");
+      //   console.log("    └── 🎙️ GPT 상태:", state?.gpt ? {
+      //     isRecording: state.gpt.isRecording,
+      //     startedBy: state.gpt.startedBy,
+      //     keywordsCount: state.gpt.keywords?.length || 0,
+      //   } : "없음");
+      //   console.groupEnd();
+      // });
+      // console.groupEnd();
+    };
+
+    awareness.on("change", handleAwarenessChange);
+
     const setAwarenessState = () => {
       const initialState = {
         user: {
@@ -556,7 +563,9 @@ export function useYjsCollaboration(
         cursor: null, // mousemove에서 갱신
         chat: null, // 채팅 입력 시 갱신
       };
-      console.log("[useYjsCollaboration] set initial awareness state:", initialState);
+      console.group("🚀 [Awareness] 초기 상태 설정");
+      console.log("└── 📝 설정할 상태:", initialState);
+      console.groupEnd();
       awareness.setLocalState(initialState);
     };
 
@@ -573,11 +582,14 @@ export function useYjsCollaboration(
 
       return () => {
         collab.client.provider.off("status", handleStatus);
+        awareness.off("change", handleAwarenessChange);
       };
     }
 
     return () => {
+      awareness.off("change", handleAwarenessChange);
       awareness.setLocalState(null);
+      // console.log("🔌 [Awareness] 연결 해제 및 상태 초기화");
     };
   }, [collab, cursorColor, currentUser, myRole]);
 
@@ -588,6 +600,11 @@ export function useYjsCollaboration(
     if (!collab) return;
     const awareness = collab.client.provider.awareness;
     if (!awareness) return;
+    // console.log("💬 [Awareness] 채팅 상태 업데이트:", chatData ? {
+    //   isTyping: chatData.isTyping,
+    //   currentText: chatData.currentText?.substring(0, 30) + (chatData.currentText?.length > 30 ? "..." : ""),
+    //   timestamp: new Date(chatData.timestamp).toLocaleTimeString(),
+    // } : "null (초기화)");
     awareness.setLocalStateField("chat", chatData);
   }, [collab]);
 
@@ -603,6 +620,13 @@ export function useYjsCollaboration(
     if (!collab) return;
     const awareness = collab.client.provider.awareness;
     if (!awareness) return;
+    // console.log("🎙️ [Awareness] GPT 상태 업데이트:", gptData ? {
+    //   isRecording: gptData.isRecording,
+    //   startedBy: gptData.startedBy,
+    //   keywordsCount: gptData.keywords?.length || 0,
+    //   keywords: gptData.keywords?.map(k => k.label).join(", ") || "없음",
+    //   timestamp: new Date(gptData.timestamp).toLocaleTimeString(),
+    // } : "null (초기화)");
     awareness.setLocalStateField("gpt", gptData);
   }, [collab]);
 

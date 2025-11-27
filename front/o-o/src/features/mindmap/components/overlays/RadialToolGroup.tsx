@@ -13,6 +13,7 @@ export default function RadialToolGroup({
   paletteOpen = false,
   addInputOpen = false,
   currentColor = "#263A6B",
+  currentTheme,
   focusedButton = null,
   centerX = 0,
   centerY = 0,
@@ -173,6 +174,7 @@ export default function RadialToolGroup({
             {it.key === "palette" && (
               <ColorPalette
                 open={paletteOpen}
+                currentTheme={currentTheme}
                 value={currentColor}
                 onColorChange={onColorChange}
                 onApplyTheme={onApplyTheme}

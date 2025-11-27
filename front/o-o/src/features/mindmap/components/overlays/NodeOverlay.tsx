@@ -39,6 +39,7 @@ function NodeOverlay({
   isLoadingRecommendation = false, // 추천 로딩 상태
   setIsLoadingRecommendation, // 로딩 상태 설정 함수
   workspaceId,
+  currentTheme,
   isReadOnly = false,
   onSelect,
   onDeselect,
@@ -437,7 +438,12 @@ function NodeOverlay({
             transformOrigin: "center center",
           }}
         >
-          <CustomTooltip content={isHovered && memo && !isDragging ? memo : ""}>
+          <CustomTooltip
+              content={isHovered && memo && !isDragging ? memo : ""}
+              screenX={x}
+              screenY={y}
+              nodeRadius={96 * zoom}
+            >
             <div
               style={{
                 transform: `scale(${zoom})`,
@@ -551,6 +557,7 @@ function NodeOverlay({
             paletteOpen={paletteOpen}
             addInputOpen={showAddInput}
             currentColor={initialColor}
+            currentTheme={currentTheme}
             focusedButton={focusedButton}
             centerX={x}
             centerY={y}

@@ -296,7 +296,7 @@ const VoiceChat: React.FC<VoiceChatProps> = ({
     // 녹음이 시작될 때만 Awareness 초기화 (false -> true 전환)
     if (gpt.isRecording && !prevIsRecordingRef.current) {
       if (updateGptState && currentUserRef.current) {
-        console.log('[VoiceChat] 📡 Awareness 초기화: 녹음 시작');
+        // console.log('[VoiceChat] 📡 Awareness 초기화: 녹음 시작');
         updateGptState({
           isRecording: true,
           keywords: [], // 초기 상태
@@ -308,8 +308,8 @@ const VoiceChat: React.FC<VoiceChatProps> = ({
     // 녹음이 종료될 때 isRecording만 false로 업데이트 (키워드는 유지)
     else if (!gpt.isRecording && prevIsRecordingRef.current) {
       if (updateGptState && gptStateRef.current) {
-        console.log('[VoiceChat] 📡 Awareness 업데이트: 녹음 종료');
-        console.log('[VoiceChat] 현재 상태:', gptStateRef.current);
+        // console.log('[VoiceChat] 📡 Awareness 업데이트: 녹음 종료');
+        // console.log('[VoiceChat] 현재 상태:', gptStateRef.current);
         updateGptState({
           ...gptStateRef.current, // ref 사용으로 최신 상태 참조
           isRecording: false, // 녹음 상태만 false로 변경

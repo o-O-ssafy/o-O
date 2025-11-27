@@ -13,7 +13,13 @@ export function useColorTheme(workspaceTheme: WorkspaceTheme) {
    * 백엔드 테마를 프론트엔드 ColorThemeName으로 변환
    */
   const themeName = useMemo<ColorThemeName>(() => {
-    return mapWorkspaceThemeToColorTheme(workspaceTheme) as ColorThemeName;
+    const mappedTheme = mapWorkspaceThemeToColorTheme(workspaceTheme) as ColorThemeName;
+    console.log("[useColorTheme] 🎨 테마 변환:", {
+      workspaceTheme,
+      mappedTheme,
+      availableColors: COLOR_THEMES[mappedTheme],
+    });
+    return mappedTheme;
   }, [workspaceTheme]);
 
   /**

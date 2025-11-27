@@ -23,6 +23,7 @@ import { createRadialGradient } from "@/shared/utils/gradientUtils";
 
 export default function ColorPalette({
   open,
+  currentTheme = "Pastel",
   onColorChange,
   onApplyTheme,
   onClose,
@@ -32,7 +33,7 @@ export default function ColorPalette({
 }: ColorPaletteProps) {
   const paletteRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState({ left: 0, top: 0 });
-  const [selectedTheme, setSelectedTheme] = useState<ColorThemeName>("Pastel");
+  const [selectedTheme, setSelectedTheme] = useState<ColorThemeName>(currentTheme as ColorThemeName);
 
   /** 내부 상태: 현재 색상(hex) + 투명도(0~1) */
   const [currentColor, setCurrentColor] = useState(() => Color(value).alpha(1));
@@ -48,10 +49,16 @@ export default function ColorPalette({
     [onColorChange]
   );
 
+  /** 🎨 워크스페이스 테마 변경 시 동기화 */
+  useEffect(() => {
+    setSelectedTheme(currentTheme as ColorThemeName);
+  }, [currentTheme]);
+
   /** 🎨 테마 변경 */
   const handleThemeChange = (theme: ColorThemeName) => {
     setSelectedTheme(theme);
-    onApplyTheme?.([...COLOR_THEMES[theme]]);
+    // 테마 이름도 함께 전달
+    onApplyTheme?.([...COLOR_THEMES[theme]], theme);
   };
 
   /** ✋ 외부 클릭 감지 */

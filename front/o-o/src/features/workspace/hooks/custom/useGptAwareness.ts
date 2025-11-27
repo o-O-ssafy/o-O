@@ -59,11 +59,11 @@ export function useGptAwareness(awareness?: Awareness): GptState | null {
         const user = (state as any)?.user;
 
         if (gptData && user?.role === 'MAINTAINER' && gptData.keywords !== undefined) {
-          console.log('[useGptAwareness] ✅ MAINTAINER state 선택 (빈 배열 포함):', {
-            clientId,
-            keywordsCount: gptData.keywords.length,
-            keywords: gptData.keywords.length > 0 ? gptData.keywords.map((k: any) => k.label) : '[]',
-          });
+          // console.log('[useGptAwareness] ✅ MAINTAINER state 선택 (빈 배열 포함):', {
+          //   clientId,
+          //   keywordsCount: gptData.keywords.length,
+          //   keywords: gptData.keywords.length > 0 ? gptData.keywords.map((k: any) => k.label) : '[]',
+          // });
           setGptState(gptData);
           return;
         }
@@ -86,12 +86,12 @@ export function useGptAwareness(awareness?: Awareness): GptState | null {
       }
 
       if (latestState) {
-        console.log('[useGptAwareness] 📅 최신 timestamp state 선택 (빈 배열 포함):', {
-          clientId: latestClientId,
-          timestamp: latestTimestamp,
-          keywordsCount: latestState.keywords.length,
-          keywords: latestState.keywords.length > 0 ? latestState.keywords.map((k: any) => k.label) : '[]',
-        });
+        // console.log('[useGptAwareness] 📅 최신 timestamp state 선택 (빈 배열 포함):', {
+        //   clientId: latestClientId,
+        //   timestamp: latestTimestamp,
+        //   keywordsCount: latestState.keywords.length,
+        //   keywords: latestState.keywords.length > 0 ? latestState.keywords.map((k: any) => k.label) : '[]',
+        // });
         setGptState(latestState);
         return;
       }
@@ -101,11 +101,11 @@ export function useGptAwareness(awareness?: Awareness): GptState | null {
         const gptData = (state as any)?.gpt;
 
         if (gptData && gptData.isRecording) {
-          console.log('[useGptAwareness] 🎤 녹음 중 state 선택:', {
-            clientId,
-            isRecording: gptData.isRecording,
-            keywordsCount: gptData.keywords?.length || 0,
-          });
+          // console.log('[useGptAwareness] 🎤 녹음 중 state 선택:', {
+          //   clientId,
+          //   isRecording: gptData.isRecording,
+          //   keywordsCount: gptData.keywords?.length || 0,
+          // });
           setGptState(gptData);
           return;
         }
@@ -116,11 +116,11 @@ export function useGptAwareness(awareness?: Awareness): GptState | null {
         const gptData = (state as any)?.gpt;
 
         if (gptData) {
-          console.log('[useGptAwareness] ⚠️ GPT state found (fallback):', {
-            clientId,
-            isRecording: gptData.isRecording,
-            keywordsCount: gptData.keywords?.length || 0,
-          });
+          // console.log('[useGptAwareness] ⚠️ GPT state found (fallback):', {
+          //   clientId,
+          //   isRecording: gptData.isRecording,
+          //   keywordsCount: gptData.keywords?.length || 0,
+          // });
           setGptState(gptData);
           return;
         }

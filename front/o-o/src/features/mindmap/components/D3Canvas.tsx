@@ -27,6 +27,7 @@ export default function D3Canvas({
   mode,
   analyzeSelection,
   selectedNodeId,
+  currentTheme,
   aiRecommendationsMap,
   trendRecommendationsMap,
   isLoadingRecommendationsMap,
@@ -653,6 +654,7 @@ export default function D3Canvas({
                     : undefined
                 }
                 workspaceId={workspaceId}
+                currentTheme={currentTheme}
                 isReadOnly={isReadOnly}
                 onSelect={() => {
                   if (mode === "analyze") {

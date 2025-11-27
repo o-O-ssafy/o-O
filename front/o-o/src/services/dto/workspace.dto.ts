@@ -19,6 +19,19 @@ export function mapWorkspaceThemeToColorTheme(theme: WorkspaceTheme): string {
   return map[theme];
 }
 
+// 프론트엔드 ColorThemeName을 백엔드 WorkspaceTheme으로 역매핑
+export function mapColorThemeToWorkspaceTheme(colorTheme: string): WorkspaceTheme {
+  const reverseMap: Record<string, WorkspaceTheme> = {
+    "Summer Beach": "SUMMER_BEACH",
+    "Citrus": "CITRUS",
+    "Retro": "RETRO",
+    "Cool": "COOL",
+    "Lavendar": "LAVENDER",  // ColorTheme 오타에 맞춤
+    "Pastel": "PASTEL",
+  };
+  return reverseMap[colorTheme] || "PASTEL";
+}
+
 // --------------------------------------
 // REQUEST
 // --------------------------------------
@@ -39,6 +52,11 @@ export interface UpdateMemberRoleRequestDTO {
 // PATCH /workspace/{workspaceId}/visibility 요청 바디
 export interface UpdateWorkspaceVisibilityRequestDTO {
   readonly visibility: WorkspaceVisibility;
+}
+
+// PATCH /workspace/{workspaceId}/theme 요청 바디
+export interface UpdateWorkspaceThemeRequestDTO {
+  readonly theme: WorkspaceTheme;
 }
 
 
