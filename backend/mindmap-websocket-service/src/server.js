@@ -714,6 +714,23 @@ function handleYjsConnection(conn, req, url) {
                   : undefined,
       });
 
+
+      if (isArrayBuffer) {
+          // ArrayBuffer → Buffer로 변환
+          const buf = Buffer.from(new Uint8Array(msg));
+          logger.info('[DEBUG][ARRAYBUFFER_PREVIEW]', {
+              workspaceId,
+              utf8Preview: buf.toString('utf8').slice(0, 200),  // 최대 200자만 자름
+              hexPreview: buf.toString('hex').slice(0, 200),    // hex 프리뷰
+          });
+      } else if (isBuffer) {
+          logger.info('[DEBUG][BUFFER_PREVIEW]', {
+              workspaceId,
+              utf8Preview: msg.toString('utf8').slice(0, 200),
+              hexPreview: msg.toString('hex').slice(0, 200),
+          });
+      }
+
       // 1) 바이너리면 → Yjs sync 메시지라고 보고, 그냥 통과 (우리는 관여 X)
       if (isBuffer) {
           // setupWSConnection 쪽 리스너가 따로 처리하니까 여기선 손 안댐
@@ -758,6 +775,7 @@ function handleYjsConnection(conn, req, url) {
           }
       } catch (error) {
           // JSON 파싱 실패 → Yjs 바이너리였던 거면 이미 위에서 걸렸음
+          logger.warn("fail")
           return;
       }
   });
