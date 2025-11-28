@@ -151,14 +151,11 @@ class YDocManager {
                   let parentId = nodeData.parentId ?? null;
                   if (typeof parentId === "string") {
                       if (/^\d+$/.test(parentId)) {
+                          // 숫자로만 구성된 문자열은 Number로 변환
                           parentId = Number(parentId);
-                      } else {
-                          logger.warn(
-                              "[YDocManager] Non-numeric parentId in Y.Doc, forcing null for DB",
-                              { workspaceId, key, parentId }
-                          );
-                          parentId = null;
                       }
+                      // 그 외 문자열(임시 ID, 예: "1764308470305-ben19rg2m-0")은 그대로 유지
+                      // 백엔드 NodeEventConsumer가 임시 ID → 실제 nodeId 매핑 처리
                   }
 
                   logger.info("[YDocManager] NODE_CHANGE_DETECTED", {
