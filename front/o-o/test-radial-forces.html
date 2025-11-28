@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Radial Layout with Forces - Edge Crossing Test</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f9fafb;
+    }
+    #container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    h1 {
+      color: #1f2937;
+      margin-bottom: 10px;
+    }
+    .info {
+      background: white;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .info h3 {
+      margin: 0 0 10px 0;
+      color: #374151;
+    }
+    .info ul {
+      margin: 5px 0;
+      padding-left: 20px;
+      color: #6b7280;
+    }
+    svg {
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .edge {
+      stroke: #3b82f6;
+      stroke-width: 2;
+      fill: none;
+    }
+    .node {
+      cursor: pointer;
+    }
+    .node circle {
+      fill: #8b5cf6;
+      stroke: white;
+      stroke-width: 3;
+    }
+    .node:hover circle {
+      fill: #7c3aed;
+    }
+    .node text {
+      fill: white;
+      font-size: 14px;
+      font-weight: 600;
+      text-anchor: middle;
+      dominant-baseline: middle;
+      pointer-events: none;
+    }
+    .stats {
+      margin-top: 20px;
+      padding: 15px;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .stats div {
+      margin: 5px 0;
+      color: #374151;
+    }
+    .stats .success {
+      color: #10b981;
+      font-weight: 600;
+    }
+    .stats .error {
+      color: #ef4444;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <div id="container">
+    <h1>🌳 Radial Layout with Force Simulation</h1>
+
+    <div class="info">
+      <h3>✅ 레이아웃 조건</h3>
+      <ul>
+        <li><strong>모든 edge는 100% 직선</strong> (곡선 금지)</li>
+        <li><strong>Edge 간 교차(crossing) 방지</strong></li>
+        <li><strong>노드 간 충돌 방지</strong> (forceManyBody + forceCollide)</li>
+        <li><strong>방사형 트리 구조 유지</strong> (depth별 radius)</li>
+        <li><strong>Force simulation 적용</strong></li>
+      </ul>
+    </div>
+
+    <svg width="1200" height="800"></svg>
+
+    <div class="stats" id="stats"></div>
+  </div>
+
+  <script>
+    // ===== 테스트 데이터 =====
+    const testNodes = [
+      { id: '1', parentId: null, keyword: 'Root' },
+      { id: '2', parentId: '1', keyword: 'Child 1' },
+      { id: '3', parentId: '1', keyword: 'Child 2' },
+      { id: '4', parentId: '1', keyword: 'Child 3' },
+      { id: '5', parentId: '2', keyword: 'GC 1-1' },
+      { id: '6', parentId: '2', keyword: 'GC 1-2' },
+      { id: '7', parentId: '3', keyword: 'GC 2-1' },
+      { id: '8', parentId: '3', keyword: 'GC 2-2' },
+      { id: '9', parentId: '3', keyword: 'GC 2-3' },
+      { id: '10', parentId: '4', keyword: 'GC 3-1' },
+      { id: '11', parentId: '5', keyword: 'GGC 1' },
+      { id: '12', parentId: '5', keyword: 'GGC 2' },
+    ];
+
+    const centerX = 600;
+    const centerY = 400;
+    const baseRadius = 200;
+    const nodeRadius = 40;
+
+    // ===== Edge Crossing 검사 함수 =====
+    function doSegmentsIntersect(p1, p2, p3, p4) {
+      const ccw = (A, B, C) => (C.y - A.y) * (B.x - A.x) > (B.y - A.y) * (C.x - A.x);
+      return ccw(p1, p3, p4) !== ccw(p2, p3, p4) && ccw(p1, p2, p3) !== ccw(p1, p2, p4);
+    }
+
+    function countEdgeCrossings(positions, edges) {
+      let crossings = 0;
+      for (let i = 0; i < edges.length; i++) {
+        for (let j = i + 1; j < edges.length; j++) {
+          const e1 = edges[i];
+          const e2 = edges[j];
+
+          if (e1.source === e2.source || e1.source === e2.target ||
+              e1.target === e2.source || e1.target === e2.target) {
+            continue;
+          }
+
+          const p1 = positions.get(e1.source);
+          const p2 = positions.get(e1.target);
+          const p3 = positions.get(e2.source);
+          const p4 = positions.get(e2.target);
+
+          if (p1 && p2 && p3 && p4 && doSegmentsIntersect(p1, p2, p3, p4)) {
+            crossings++;
+          }
+        }
+      }
+      return crossings;
+    }
+
+    // ===== 레이아웃 계산 =====
+    async function calculateLayout() {
+      console.log('[Test] Starting layout calculation...');
+
+      // 1. 계층 구조 생성
+      const nodeMap = new Map();
+      let rootId = null;
+
+      testNodes.forEach(node => {
+        nodeMap.set(node.id, { id: node.id, keyword: node.keyword, children: [] });
+        if (!node.parentId) rootId = node.id;
+      });
+
+      testNodes.forEach(node => {
+        if (node.parentId) {
+          const parent = nodeMap.get(node.parentId);
+          const child = nodeMap.get(node.id);
+          if (parent && child) parent.children.push(child);
+        }
+      });
+
+      const root = nodeMap.get(rootId);
+      const hierarchy = d3.hierarchy(root, d => d.children);
+
+      // 2. Tree layout
+      const treeLayout = d3.tree()
+        .nodeSize([nodeRadius * 6.5, baseRadius])
+        .separation((a, b) => a.parent === b.parent ? 2.0 : 3.5);
+
+      const treeRoot = treeLayout(hierarchy);
+
+      // 3. 극좌표 변환
+      let minX = Infinity, maxX = -Infinity;
+      treeRoot.each(node => {
+        if (node.x < minX) minX = node.x;
+        if (node.x > maxX) maxX = node.x;
+      });
+
+      const xRange = maxX - minX || 1;
+      const simNodes = [];
+
+      treeRoot.each(node => {
+        const normalizedX = (node.x - minX) / xRange;
+        const angle = normalizedX * 2 * Math.PI;
+        const radius = node.depth * baseRadius;
+
+        const x = centerX + radius * Math.sin(angle);
+        const y = centerY - radius * Math.cos(angle);
+
+        simNodes.push({
+          id: node.data.id,
+          keyword: node.data.keyword,
+          x,
+          y,
+          fx: node.depth === 0 ? centerX : null,
+          fy: node.depth === 0 ? centerY : null,
+          depth: node.depth,
+          angle,
+          radius,
+        });
+      });
+
+      // Edge 정보
+      const edges = testNodes
+        .filter(n => n.parentId)
+        .map(n => ({ source: n.parentId, target: n.id }));
+
+      // 4. Force simulation
+      return new Promise(resolve => {
+        const simulation = d3.forceSimulation(simNodes)
+          .force('charge', d3.forceManyBody().strength(-1200).distanceMax(baseRadius * 4))
+          .force('collide', d3.forceCollide().radius(nodeRadius * 3.5).strength(1.0).iterations(5))
+          .force('radial', d3.forceRadial(d => d.radius, centerX, centerY).strength(0.7))
+          .alphaDecay(0.012)
+          .velocityDecay(0.3);
+
+        let tickCount = 0;
+        const maxTicks = 400;
+
+        simulation.on('tick', () => {
+          tickCount++;
+          if (tickCount % 100 === 0) {
+            const posMap = new Map(simNodes.map(n => [n.id, { x: n.x, y: n.y }]));
+            const crossings = countEdgeCrossings(posMap, edges);
+            console.log(`[Test] Tick ${tickCount}: ${crossings} edge crossings`);
+          }
+        });
+
+        simulation.on('end', () => {
+          const posMap = new Map(simNodes.map(n => [n.id, { x: n.x, y: n.y }]));
+          const finalCrossings = countEdgeCrossings(posMap, edges);
+
+          console.log(`[Test] Simulation complete: ${finalCrossings} crossings`);
+
+          // 무조건 depth별 균등 각도 재배치 (겹침 완전 방지)
+          console.log('[Test] Applying uniform angle distribution...');
+          const depthGroups = new Map();
+          simNodes.forEach(node => {
+            if (!depthGroups.has(node.depth)) depthGroups.set(node.depth, []);
+            depthGroups.get(node.depth).push(node);
+          });
+
+          depthGroups.forEach((nodes, depth) => {
+            if (depth === 0) return;
+
+            // 현재 각도 계산 후 정렬
+            nodes.forEach(node => {
+              const dx = node.x - centerX;
+              const dy = node.y - centerY;
+              node.angle = Math.atan2(dx, -dy);
+              if (node.angle < 0) node.angle += 2 * Math.PI;
+            });
+
+            nodes.sort((a, b) => a.angle - b.angle);
+
+            // 최소 반지름 계산 (겹침 방지)
+            const nodeCount = nodes.length;
+            const nodeSpacing = nodeRadius * 4;
+            const minCircumference = nodeCount * nodeSpacing;
+            const minRadius = minCircumference / (2 * Math.PI);
+
+            const baseRadiusForDepth = depth * baseRadius;
+            const actualRadius = Math.max(baseRadiusForDepth, minRadius);
+
+            if (actualRadius > baseRadiusForDepth) {
+              console.log(`[Test] 🔧 Depth ${depth}: radius adjusted ${baseRadiusForDepth.toFixed(0)} → ${actualRadius.toFixed(0)}`);
+            }
+
+            // 균등 재배치
+            const angleStep = (2 * Math.PI) / nodeCount;
+            const startAngle = nodes[0].angle;
+
+            nodes.forEach((node, i) => {
+              const newAngle = startAngle + (i * angleStep);
+              node.x = centerX + actualRadius * Math.sin(newAngle);
+              node.y = centerY - actualRadius * Math.cos(newAngle);
+            });
+
+            console.log(`[Test] Depth ${depth}: ${nodeCount} nodes, radius: ${actualRadius.toFixed(0)}, ${(angleStep * 180 / Math.PI).toFixed(1)}° apart`);
+          });
+
+          const adjustedPosMap = new Map(simNodes.map(n => [n.id, { x: n.x, y: n.y }]));
+          const adjustedCrossings = countEdgeCrossings(adjustedPosMap, edges);
+          console.log(`[Test] After uniform distribution: ${adjustedCrossings} crossings`);
+
+          resolve({ nodes: simNodes, edges });
+        });
+
+        setTimeout(() => simulation.stop(), 10000);
+      });
+    }
+
+    // ===== 렌더링 =====
+    async function render() {
+      const startTime = performance.now();
+      const { nodes, edges } = await calculateLayout();
+      const endTime = performance.now();
+
+      const svg = d3.select('svg');
+      const g = svg.append('g');
+
+      // Edge 그리기 (100% 직선)
+      g.selectAll('.edge')
+        .data(edges)
+        .enter()
+        .append('path')
+        .attr('class', 'edge')
+        .attr('d', d => {
+          const source = nodes.find(n => n.id === d.source);
+          const target = nodes.find(n => n.id === d.target);
+          if (!source || !target) return '';
+          // 🔥 직선만 사용 (M = Move, L = Line)
+          return `M ${source.x} ${source.y} L ${target.x} ${target.y}`;
+        });
+
+      // Node 그리기
+      const nodeGroups = g.selectAll('.node')
+        .data(nodes)
+        .enter()
+        .append('g')
+        .attr('class', 'node')
+        .attr('transform', d => `translate(${d.x}, ${d.y})`);
+
+      nodeGroups.append('circle')
+        .attr('r', nodeRadius);
+
+      nodeGroups.append('text')
+        .text(d => d.keyword);
+
+      // 통계 표시
+      const posMap = new Map(nodes.map(n => [n.id, { x: n.x, y: n.y }]));
+      const finalCrossings = countEdgeCrossings(posMap, edges);
+
+      const statsDiv = document.getElementById('stats');
+      statsDiv.innerHTML = `
+        <div><strong>총 노드:</strong> ${nodes.length}개</div>
+        <div><strong>총 엣지:</strong> ${edges.length}개</div>
+        <div><strong>계산 시간:</strong> ${(endTime - startTime).toFixed(1)}ms</div>
+        <div class="${finalCrossings === 0 ? 'success' : 'error'}">
+          <strong>Edge 교차:</strong> ${finalCrossings}개 ${finalCrossings === 0 ? '✅' : '❌'}
+        </div>
+        <div><strong>Edge 타입:</strong> 100% 직선 ✅</div>
+        <div><strong>Force Simulation:</strong> 적용됨 ✅</div>
+      `;
+
+      console.log('[Test] Rendering complete');
+    }
+
+    // 실행
+    render();
+  </script>
+</body>
+</html>

@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>마인드맵 트리 시각화 테스트</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f5f5f5;
+    }
+
+    #container {
+      width: 100%;
+      height: 800px;
+      background: white;
+      border: 2px solid #333;
+      border-radius: 8px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    svg {
+      width: 100%;
+      height: 100%;
+      cursor: grab;
+    }
+
+    svg:active {
+      cursor: grabbing;
+    }
+
+    .edge {
+      stroke: #3b82f6;
+      stroke-width: 3;
+      fill: none;
+      opacity: 0.8;
+    }
+
+    .node-group {
+      cursor: pointer;
+    }
+
+    .node-circle {
+      filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.1));
+    }
+
+    .node-text {
+      font-size: 14px;
+      font-weight: 600;
+      fill: white;
+      text-anchor: middle;
+      dominant-baseline: middle;
+      pointer-events: none;
+      user-select: none;
+    }
+
+    .info-panel {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background: white;
+      padding: 15px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      max-width: 300px;
+      font-size: 13px;
+    }
+
+    .info-panel h3 {
+      margin: 0 0 10px 0;
+      font-size: 16px;
+      color: #333;
+    }
+
+    .info-panel ul {
+      margin: 0;
+      padding-left: 20px;
+    }
+
+    .info-panel li {
+      margin: 5px 0;
+      color: #666;
+    }
+
+    .stats {
+      margin-top: 15px;
+      padding-top: 15px;
+      border-top: 1px solid #eee;
+    }
+
+    .stats div {
+      margin: 5px 0;
+    }
+
+    .stats strong {
+      color: #3b82f6;
+    }
+  </style>
+</head>
+<body>
+  <h1 style="margin: 0 0 20px 0; color: #333;">마인드맵 트리 구조 시각화</h1>
+
+  <div id="container">
+    <svg id="mindmap"></svg>
+
+    <div class="info-panel">
+      <h3>🎯 시각화 정보</h3>
+      <ul>
+        <li>모든 부모-자식 관계가 <strong>선으로 연결</strong>되어 있습니다</li>
+        <li>드래그하여 화면을 이동할 수 있습니다</li>
+        <li>마우스 휠로 확대/축소 가능합니다</li>
+        <li>노드를 클릭하면 정보가 표시됩니다</li>
+      </ul>
+
+      <div class="stats">
+        <div><strong>총 노드:</strong> <span id="node-count">0</span>개</div>
+        <div><strong>총 연결선:</strong> <span id="edge-count">0</span>개</div>
+        <div><strong>트리 깊이:</strong> <span id="tree-depth">0</span> 레벨</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ============================================
+    // 데이터 정의
+    // ============================================
+
+    // 트리 구조 데이터
+    const treeData = {
+      keyword: "Root",
+      children: [
+        {
+          keyword: "모델 파인튜닝",
+          children: [
+            { keyword: "임베딩" },
+            { keyword: "레퍼런스 윈도우" }
+          ]
+        },
+        {
+          keyword: "프롬프트 엔지니어링",
+          children: [
+            { keyword: "데이터 분석" },
+            { keyword: "로그 수집" },
+            { keyword: "시각화" }
+          ]
+        },
+        {
+          keyword: "AI 모델",
+          children: [
+            { keyword: "실시간 협업" }
+          ]
+        },
+        {
+          keyword: "사용자 경험 개선",
+          children: [
+            { keyword: "UI/UX" },
+            { keyword: "반응형 디자인" }
+          ]
+        },
+        {
+          keyword: "시스템",
+          children: [
+            { keyword: "커서 동기화" },
+            { keyword: "충돌 해결" },
+            { keyword: "버전 관리" }
+          ]
+        }
+      ]
+    };
+
+    // ============================================
+    // 트리 데이터를 노드/엣지로 변환
+    // ============================================
+
+    function flattenTree(tree, parentId = null) {
+      const nodes = [];
+      const edges = [];
+      let idCounter = 0;
+
+      function traverse(node, parent) {
+        const currentId = `node-${idCounter++}`;
+
+        nodes.push({
+          id: currentId,
+          keyword: node.keyword,
+          parentId: parent
+        });
+
+        if (parent !== null) {
+          edges.push({
+            id: `${parent}-${currentId}`,
+            source: parent,
+            target: currentId
+          });
+        }
+
+        if (node.children) {
+          node.children.forEach(child => traverse(child, currentId));
+        }
+      }
+
+      traverse(tree, parentId);
+      return { nodes, edges };
+    }
+
+    const { nodes, edges } = flattenTree(treeData);
+
+    console.log('📊 생성된 데이터:', { nodes, edges });
+
+    // ============================================
+    // 노드 레벨 계산
+    // ============================================
+
+    function calculateNodeLevels(nodes) {
+      const levels = new Map();
+
+      // 루트 노드 찾기
+      nodes.forEach(node => {
+        if (node.parentId === null) {
+          levels.set(node.id, 0);
+        }
+      });
+
+      // BFS로 자식 레벨 계산
+      let changed = true;
+      let maxIterations = 100;
+      let iteration = 0;
+
+      while (changed && iteration < maxIterations) {
+        changed = false;
+        iteration++;
+
+        nodes.forEach(node => {
+          if (!levels.has(node.id) && node.parentId) {
+            const parentLevel = levels.get(node.parentId);
+            if (parentLevel !== undefined) {
+              levels.set(node.id, parentLevel + 1);
+              changed = true;
+            }
+          }
+        });
+      }
+
+      return levels;
+    }
+
+    // ============================================
+    // 방사형 레이아웃 계산
+    // ============================================
+
+    function calculateRadialLayout(nodes, centerX, centerY) {
+      const levels = calculateNodeLevels(nodes);
+      const nodesByDepth = new Map();
+
+      // depth별로 노드 그룹화
+      nodes.forEach(node => {
+        const depth = levels.get(node.id) ?? 0;
+        if (!nodesByDepth.has(depth)) {
+          nodesByDepth.set(depth, []);
+        }
+        nodesByDepth.get(depth).push(node);
+      });
+
+      const positions = new Map();
+
+      // depth별로 처리
+      nodesByDepth.forEach((depthNodes, depth) => {
+        if (depth === 0) {
+          // 루트 노드는 중심에
+          depthNodes.forEach(node => {
+            positions.set(node.id, { x: centerX, y: centerY });
+          });
+        } else {
+          // depth에 따른 반지름
+          const radius = 150 + (depth - 1) * 150;
+          const count = depthNodes.length;
+
+          depthNodes.forEach((node, i) => {
+            const theta = (2 * Math.PI / count) * i;
+            const x = centerX + radius * Math.cos(theta);
+            const y = centerY + radius * Math.sin(theta);
+            positions.set(node.id, { x, y });
+          });
+        }
+      });
+
+      return { positions, levels };
+    }
+
+    // ============================================
+    // 베지어 곡선 경로 생성
+    // ============================================
+
+    function createBezierPath(source, target) {
+      const dx = target.x - source.x;
+      const dy = target.y - source.y;
+
+      const controlPointOffset = 40;
+      const midX = (source.x + target.x) / 2;
+      const midY = (source.y + target.y) / 2;
+
+      const angle = Math.atan2(dy, dx);
+      const perpAngle = angle + Math.PI / 2;
+
+      const controlX = midX + Math.cos(perpAngle) * controlPointOffset;
+      const controlY = midY + Math.sin(perpAngle) * controlPointOffset;
+
+      return `M ${source.x} ${source.y} Q ${controlX} ${controlY} ${target.x} ${target.y}`;
+    }
+
+    // ============================================
+    // D3 시각화
+    // ============================================
+
+    const svg = d3.select("#mindmap");
+    const container = document.getElementById("container");
+    const width = container.clientWidth;
+    const height = container.clientHeight;
+    const centerX = width / 2;
+    const centerY = height / 2;
+
+    // 레이아웃 계산
+    const { positions, levels } = calculateRadialLayout(nodes, centerX, centerY);
+
+    // 위치 정보를 노드에 추가
+    nodes.forEach(node => {
+      const pos = positions.get(node.id);
+      node.x = pos.x;
+      node.y = pos.y;
+      node.level = levels.get(node.id);
+    });
+
+    console.log('📍 노드 위치:', nodes);
+
+    // 줌/팬 설정
+    const g = svg.append("g");
+
+    const zoom = d3.zoom()
+      .scaleExtent([0.3, 3])
+      .on("zoom", (event) => {
+        g.attr("transform", event.transform);
+      });
+
+    svg.call(zoom);
+
+    // ============================================
+    // 엣지(연결선) 렌더링 - 먼저 그려서 뒤에 배치
+    // ============================================
+
+    const edgesGroup = g.append("g").attr("class", "edges");
+
+    const edgePaths = edgesGroup
+      .selectAll("path")
+      .data(edges)
+      .enter()
+      .append("path")
+      .attr("class", "edge")
+      .attr("d", d => {
+        const source = nodes.find(n => n.id === d.source);
+        const target = nodes.find(n => n.id === d.target);
+
+        console.log(`🔗 엣지 ${d.id}:`, {
+          source: { id: source.id, x: source.x, y: source.y },
+          target: { id: target.id, x: target.x, y: target.y }
+        });
+
+        return createBezierPath(
+          { x: source.x, y: source.y },
+          { x: target.x, y: target.y }
+        );
+      });
+
+    console.log(`✅ 총 ${edges.length}개의 연결선이 생성되었습니다!`);
+
+    // ============================================
+    // 노드 렌더링 - 엣지 위에 배치
+    // ============================================
+
+    const nodesGroup = g.append("g").attr("class", "nodes");
+
+    const nodeGroups = nodesGroup
+      .selectAll("g")
+      .data(nodes)
+      .enter()
+      .append("g")
+      .attr("class", "node-group")
+      .attr("transform", d => `translate(${d.x}, ${d.y})`);
+
+    // 노드 원
+    nodeGroups
+      .append("circle")
+      .attr("class", "node-circle")
+      .attr("r", 50)
+      .attr("fill", d => {
+        // 레벨별로 색상 구분
+        const colors = ["#ef4444", "#f59e0b", "#10b981", "#3b82f6", "#8b5cf6", "#ec4899"];
+        return colors[d.level % colors.length];
+      })
+      .on("click", function(event, d) {
+        event.stopPropagation();
+        alert(`노드: ${d.keyword}\n레벨: ${d.level}\n위치: (${d.x.toFixed(0)}, ${d.y.toFixed(0)})`);
+      });
+
+    // 노드 텍스트
+    nodeGroups
+      .append("text")
+      .attr("class", "node-text")
+      .text(d => d.keyword)
+      .each(function(d) {
+        // 긴 텍스트는 줄바꿈
+        const text = d3.select(this);
+        const words = d.keyword.split(' ');
+
+        if (words.length > 1) {
+          text.text('');
+          words.forEach((word, i) => {
+            text.append("tspan")
+              .attr("x", 0)
+              .attr("dy", i === 0 ? 0 : "1.2em")
+              .text(word);
+          });
+        }
+      });
+
+    // ============================================
+    // 통계 업데이트
+    // ============================================
+
+    const maxLevel = Math.max(...Array.from(levels.values()));
+
+    document.getElementById("node-count").textContent = nodes.length;
+    document.getElementById("edge-count").textContent = edges.length;
+    document.getElementById("tree-depth").textContent = maxLevel + 1;
+
+    // ============================================
+    // 검증 로그
+    // ============================================
+
+    console.log('='.repeat(50));
+    console.log('✅ 마인드맵 시각화 완료!');
+    console.log('='.repeat(50));
+    console.log(`📊 총 노드: ${nodes.length}개`);
+    console.log(`🔗 총 연결선: ${edges.length}개`);
+    console.log(`📏 트리 깊이: ${maxLevel + 1} 레벨`);
+    console.log('='.repeat(50));
+    console.log('');
+    console.log('🎯 부모-자식 연결 관계:');
+    edges.forEach(edge => {
+      const source = nodes.find(n => n.id === edge.source);
+      const target = nodes.find(n => n.id === edge.target);
+      console.log(`  ${source.keyword} → ${target.keyword}`);
+    });
+    console.log('='.repeat(50));
+
+    // 모든 엣지가 실제로 렌더링되었는지 확인
+    const renderedEdgeCount = document.querySelectorAll('.edge').length;
+    if (renderedEdgeCount === edges.length) {
+      console.log(`✅ 모든 연결선이 화면에 렌더링되었습니다! (${renderedEdgeCount}개)`);
+    } else {
+      console.error(`❌ 연결선 렌더링 오류: 예상 ${edges.length}개, 실제 ${renderedEdgeCount}개`);
+    }
+  </script>
+</body>
+</html>

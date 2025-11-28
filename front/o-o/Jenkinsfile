@@ -1,0 +1,126 @@
+pipeline {
+  agent any
+  options {
+    timestamps()
+    gitLabConnection('o-o') // Jenkins > Configure System > GitLab 연결 이름
+  }
+
+  environment {
+    AWS_REGION   = 'ap-northeast-2'
+    S3_BUCKET    = 'o-o-frontend'
+    CF_DIST_ID   = 'E15YK94HXRWQA2'
+    BUILD_DIR    = 'dist'
+    NODE_OPTIONS = '--max-old-space-size=2048'
+  }
+
+  stages {
+
+    stage('1) Checkout') {
+      steps {
+        gitlabCommitStatus(name: '1) Checkout') {
+          checkout scm
+          sh 'echo "Branch: ${BRANCH_NAME}"'
+        }
+      }
+    }
+
+    stage('2) Install & Build') {
+      steps {
+        gitlabCommitStatus(name: '2) Install & Build') {
+          withCredentials([
+            string(credentialsId: 'fb-api-key', variable: 'FB_API_KEY'),
+            string(credentialsId: 'fb-auth-domain', variable: 'FB_AUTH_DOMAIN'),
+            string(credentialsId: 'fb-project-id', variable: 'FB_PROJECT_ID'),
+            string(credentialsId: 'fb-storage-bucket', variable: 'FB_STORAGE_BUCKET'),
+            string(credentialsId: 'fb-msg-sender', variable: 'FB_MESSAGING_SENDER_ID'),
+            string(credentialsId: 'fb-app-id', variable: 'FB_APP_ID'),
+            string(credentialsId: 'gg-client-id', variable: 'GG_CLIENT_ID'),
+            string(credentialsId: 'vite-api-url', variable: 'VITE_API_URL'),
+            string(credentialsId: 'ws_url', variable: 'VITE_WS_URL'),
+            string(credentialsId: 'login-api-url', variable: 'VITE_LOGIN_API_URL')
+          ]) {
+            dir('front/o-o') {
+              sh '''
+                echo "=== Write .env.production ==="
+                cat > .env.production <<EOF
+VITE_FIREBASE_API_KEY=${FB_API_KEY}
+VITE_FIREBASE_AUTH_DOMAIN=${FB_AUTH_DOMAIN}
+VITE_FIREBASE_PROJECT_ID=${FB_PROJECT_ID}
+VITE_FIREBASE_STORAGE_BUCKET=${FB_STORAGE_BUCKET}
+VITE_FIREBASE_MESSAGING_SENDER_ID=${FB_MESSAGING_SENDER_ID}
+VITE_FIREBASE_APP_ID=${FB_APP_ID}
+VITE_GOOGLE_CLIENT_ID=${GG_CLIENT_ID}
+VITE_API_URL=${VITE_API_URL}
+VITE_WS_URL=${VITE_WS_URL}
+VITE_LOGIN_API_URL=${VITE_LOGIN_API_URL}
+EOF
+
+                node -v && npm -v
+                [ -f package-lock.json ] && npm ci || npm install
+                npm i -D @rollup/rollup-linux-x64-gnu
+                npm run build
+
+                echo "=== Build output check ==="
+                ls -lah ${BUILD_DIR} || { echo "❌ ${BUILD_DIR} not found"; exit 1; }
+              '''
+            }
+          }
+        }
+      }
+    }
+
+    stage('3) Upload to S3') {
+      steps {
+        gitlabCommitStatus(name: '3) Upload to S3') {
+          sh 'test -d front/o-o/${BUILD_DIR} || { echo "${BUILD_DIR} not found"; ls -R front/o-o; exit 1; }'
+          dir('front/o-o') {
+            withAWS(credentials: 'aws-frontend-deploy', region: "${AWS_REGION}") {
+              sh """
+                echo "=== Upload static assets to S3 ==="
+                aws s3 sync ${BUILD_DIR} s3://${S3_BUCKET} \
+                  --delete \
+                  --exclude "index.html" \
+                  --cache-control "public,max-age=31536000,immutable"
+
+                echo "=== Upload index.html (no-cache) ==="
+                aws s3 cp ${BUILD_DIR}/index.html s3://${S3_BUCKET}/index.html \
+                  --cache-control "no-cache,no-store,must-revalidate" \
+                  --metadata-directive REPLACE \
+                  --content-type "text/html; charset=utf-8"
+              """
+            }
+          }
+        }
+      }
+    }
+
+    stage('4) CloudFront Invalidation') {
+      steps {
+        gitlabCommitStatus(name: '4) CloudFront Invalidation') {
+          withAWS(credentials: 'aws-frontend-deploy', region: "${AWS_REGION}") {
+            sh '''
+              echo "=== Invalidate CloudFront Cache ==="
+              aws cloudfront create-invalidation \
+                --distribution-id ${CF_DIST_ID} \
+                --paths "/*"
+            '''
+          }
+        }
+      }
+    }
+  }
+
+  post {
+    success {
+      echo '✅ Deploy done: S3 upload + CloudFront invalidation completed.'
+      updateGitlabCommitStatus name: 'frontend-deploy', state: 'success'
+    }
+    failure {
+      echo '❌ Deploy failed. Check console log.'
+      updateGitlabCommitStatus name: 'frontend-deploy', state: 'failed'
+    }
+    always {
+      cleanWs(deleteDirs: true, notFailBuild: true)
+    }
+  }
+}

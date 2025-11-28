@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Radial Layout with Edges Test</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #f9fafb;
+    }
+    #canvas {
+      width: 100%;
+      height: 90vh;
+      background: white;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+    }
+    .info {
+      margin-bottom: 20px;
+      padding: 15px;
+      background: white;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+    }
+    .node {
+      fill: url(#gradient);
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    .node:hover {
+      opacity: 0.8;
+    }
+    .node-label {
+      font-size: 14px;
+      font-weight: 500;
+      text-anchor: middle;
+      pointer-events: none;
+      fill: white;
+    }
+    .edge {
+      stroke: #d1d5db;
+      stroke-width: 2;
+      fill: none;
+      opacity: 0.6;
+    }
+    .depth-label {
+      font-size: 12px;
+      fill: #6b7280;
+      text-anchor: middle;
+    }
+  </style>
+</head>
+<body>
+  <div class="info">
+    <h2>Radial Layout with Parent-Child Edges</h2>
+    <p>각 depth별로 서로 다른 반지름을 가진 방사형 레이아웃 + 부모-자식 간 선 연결</p>
+    <ul>
+      <li>Depth 0: 중심 (Root)</li>
+      <li>Depth 1: 반지름 250px (Spring Boot, DevOps, Frontend)</li>
+      <li>Depth 2: 반지름 450px (JPA, Docker, React 등)</li>
+      <li>Depth 3: 반지름 650px (Docker Compose, Custom Hooks)</li>
+    </ul>
+  </div>
+
+  <svg id="canvas"></svg>
+
+  <script>
+    // 노드 데이터
+    const nodes = [
+      // Root (depth 0)
+      { id: "root", name: "Root", parentId: null },
+
+      // Depth 1 (3개)
+      { id: "spring", name: "Spring Boot", parentId: "root" },
+      { id: "devops", name: "DevOps", parentId: "root" },
+      { id: "frontend", name: "Frontend", parentId: "root" },
+
+      // Depth 2 - Spring Boot의 자식들 (3개)
+      { id: "jpa", name: "JPA", parentId: "spring" },
+      { id: "hibernate", name: "Hibernate", parentId: "spring" },
+      { id: "query", name: "Query Opt", parentId: "spring" },
+
+      // Depth 2 - DevOps의 자식들 (2개)
+      { id: "docker", name: "Docker", parentId: "devops" },
+      { id: "github", name: "GitHub Actions", parentId: "devops" },
+
+      // Depth 2 - Frontend의 자식들 (2개)
+      { id: "react", name: "React", parentId: "frontend" },
+      { id: "state", name: "State Mgmt", parentId: "frontend" },
+
+      // Depth 3 - Docker의 자식 (1개)
+      { id: "compose", name: "Compose", parentId: "docker" },
+
+      // Depth 3 - React의 자식 (1개)
+      { id: "hooks", name: "Hooks", parentId: "react" }
+    ];
+
+    // 각 노드의 depth 계산 (BFS)
+    function calculateNodeLevels(nodes) {
+      const levels = new Map();
+
+      // 1. 루트 노드 찾기
+      for (const node of nodes) {
+        if (!node.parentId) {
+          levels.set(node.id, 0);
+        }
+      }
+
+      // 2. BFS로 자식 노드들의 레벨 계산
+      let changed = true;
+      let maxIterations = 100;
+      let iteration = 0;
+
+      while (changed && iteration < maxIterations) {
+        changed = false;
+        iteration++;
+
+        for (const node of nodes) {
+          if (!levels.has(node.id) && node.parentId) {
+            const parentLevel = levels.get(node.parentId);
+            if (parentLevel !== undefined) {
+              levels.set(node.id, parentLevel + 1);
+              changed = true;
+            }
+          }
+        }
+      }
+
+      return levels;
+    }
+
+    // Radial 레이아웃 계산
+    function calculateRadialLayout(nodes, centerX, centerY) {
+      const levels = calculateNodeLevels(nodes);
+
+      // depth별로 노드 그룹화
+      const nodesByDepth = new Map();
+      for (const node of nodes) {
+        const depth = levels.get(node.id) || 0;
+        if (!nodesByDepth.has(depth)) {
+          nodesByDepth.set(depth, []);
+        }
+        nodesByDepth.get(depth).push(node);
+      }
+
+      const positions = [];
+
+      // depth별로 처리
+      for (const [depth, depthNodes] of nodesByDepth) {
+        // depth=0 (루트): 중심에 배치
+        if (depth === 0) {
+          for (const node of depthNodes) {
+            positions.push({
+              ...node,
+              depth: depth,
+              x: centerX,
+              y: centerY
+            });
+          }
+          continue;
+        }
+
+        // depth > 0: 각 depth에 맞는 반지름 계산
+        // depth=1 → 250px, depth=2 → 450px, depth=3 → 650px
+        const radius = 250 + (depth - 1) * 200;
+
+        // 해당 depth의 노드 개수
+        const countOfDepth = depthNodes.length;
+
+        // 각 노드를 해당 depth의 원 위에 균등 배치
+        for (let i = 0; i < countOfDepth; i++) {
+          const node = depthNodes[i];
+
+          // 각도 계산 (라디안)
+          const theta = (2 * Math.PI / countOfDepth) * i;
+
+          // x, y 좌표 계산
+          const x = centerX + radius * Math.cos(theta);
+          const y = centerY + radius * Math.sin(theta);
+
+          positions.push({
+            ...node,
+            depth: depth,
+            radius: radius,
+            x: x,
+            y: y
+          });
+        }
+      }
+
+      return positions;
+    }
+
+    // 베지어 곡선 경로 생성
+    function createBezierPath(source, target) {
+      const dx = target.x - source.x;
+      const dy = target.y - source.y;
+
+      const controlPointOffset = 40;
+      const midX = (source.x + target.x) / 2;
+      const midY = (source.y + target.y) / 2;
+
+      const angle = Math.atan2(dy, dx);
+      const perpAngle = angle + Math.PI / 2;
+
+      const controlX = midX + Math.cos(perpAngle) * controlPointOffset;
+      const controlY = midY + Math.sin(perpAngle) * controlPointOffset;
+
+      return `M ${source.x} ${source.y} Q ${controlX} ${controlY} ${target.x} ${target.y}`;
+    }
+
+    // SVG 렌더링
+    const svg = document.getElementById('canvas');
+    const rect = svg.getBoundingClientRect();
+    const centerX = rect.width / 2;
+    const centerY = rect.height / 2;
+
+    svg.setAttribute('viewBox', `0 0 ${rect.width} ${rect.height}`);
+
+    // 레이아웃 계산
+    const positionedNodes = calculateRadialLayout(nodes, centerX, centerY);
+    const nodeMap = new Map(positionedNodes.map(n => [n.id, n]));
+
+    // Defs (그라데이션 정의)
+    const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+    const gradient = document.createElementNS('http://www.w3.org/2000/svg', 'radialGradient');
+    gradient.setAttribute('id', 'gradient');
+    gradient.innerHTML = `
+      <stop offset="0%" style="stop-color: #3b82f6; stop-opacity: 1" />
+      <stop offset="100%" style="stop-color: #1d4ed8; stop-opacity: 1" />
+    `;
+    defs.appendChild(gradient);
+    svg.appendChild(defs);
+
+    // 엣지 그룹
+    const edgesGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    edgesGroup.setAttribute('class', 'edges');
+
+    // 엣지 렌더링
+    positionedNodes.forEach(node => {
+      if (node.parentId) {
+        const parent = nodeMap.get(node.parentId);
+        if (parent) {
+          const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+          path.setAttribute('class', 'edge');
+          path.setAttribute('d', createBezierPath(parent, node));
+          edgesGroup.appendChild(path);
+        }
+      }
+    });
+
+    svg.appendChild(edgesGroup);
+
+    // 노드 그룹
+    const nodesGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    nodesGroup.setAttribute('class', 'nodes');
+
+    // 노드 렌더링
+    positionedNodes.forEach(node => {
+      const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      g.setAttribute('transform', `translate(${node.x}, ${node.y})`);
+
+      // 노드 원
+      const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      circle.setAttribute('class', 'node');
+      circle.setAttribute('r', '40');
+      g.appendChild(circle);
+
+      // 노드 이름
+      const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      text.setAttribute('class', 'node-label');
+      text.textContent = node.name;
+      g.appendChild(text);
+
+      // depth 표시
+      const depthText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      depthText.setAttribute('class', 'depth-label');
+      depthText.setAttribute('y', '55');
+      depthText.textContent = `d${node.depth}`;
+      g.appendChild(depthText);
+
+      nodesGroup.appendChild(g);
+    });
+
+    svg.appendChild(nodesGroup);
+
+    console.log('Positioned nodes:', positionedNodes);
+  </script>
+</body>
+</html>
