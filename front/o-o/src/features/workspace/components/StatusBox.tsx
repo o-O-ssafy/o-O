@@ -73,7 +73,7 @@ export default function StatusBox({ onStartVoiceChat, workspaceId, yclient }: Re
   // Fetch workspace data
   const { workspace } = useWorkspaceAccessQuery(workspaceId);
   const currentUser = useAppSelector((state) => state.user.user);
-  const { peers } = usePeerCursors();
+  const { onlinePeers } = usePeerCursors();
   const queryClient = useQueryClient();
   const { mutate: updateRole } = useUpdateMemberRoleMutation(yclient);
   const { mutate: updateVisibility } = useUpdateWorkspaceVisibilityMutation();
@@ -112,14 +112,14 @@ export default function StatusBox({ onStartVoiceChat, workspaceId, yclient }: Re
   const handlePermissionChange = (userEmail: string, newPermission: Permission) => {
     if (!workspace || !isMaintainer) return;
 
-    // Find the user's numeric userId from peers
-    const targetPeer = peers.find((p) => p.email === userEmail);
+    // Find the user's numeric userId from onlinePeers
+    const targetPeer = onlinePeers.find((p) => p.email === userEmail);
 
     console.log("[StatusBox] Permission change requested:", {
       userEmail,
       newPermission,
       targetPeer,
-      allPeers: peers.map(p => ({ email: p.email, userId: p.userId, name: p.name })),
+      allPeers: onlinePeers.map(p => ({ email: p.email, userId: p.userId, name: p.name })),
     });
 
     if (!targetPeer?.userId) {
@@ -176,7 +176,7 @@ export default function StatusBox({ onStartVoiceChat, workspaceId, yclient }: Re
     }
 
     // Add online peers (excluding self)
-    peers.forEach((peer) => {
+    onlinePeers.forEach((peer) => {
       if (peer.email && peer.email !== currentUser?.email && peer.userId) {
         // 우선순위: 1) 로컬 상태 2) awareness에서 받은 role 3) 기본값 VIEW
         const peerRole = memberRoles.get(peer.userId) || peer.role || "VIEW";
@@ -193,7 +193,7 @@ export default function StatusBox({ onStartVoiceChat, workspaceId, yclient }: Re
     });
 
     return users;
-  }, [currentUser, workspace, peers, memberRoles]);
+  }, [currentUser, workspace, onlinePeers, memberRoles]);
 
   const windowWidth = useWindowWidth();
 

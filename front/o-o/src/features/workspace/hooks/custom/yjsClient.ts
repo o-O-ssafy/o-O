@@ -18,6 +18,8 @@ export type YClient = {
   onJsonMessage: (handler: (data: any) => void) => void;
   /** 커스텀 메시지 리스너 등록 (role-update 등) */
   onCustomMessage: (handler: CustomMessageHandler) => () => void;
+  /** JSON 메시지를 텍스트로 전송 (바이너리 변환 방지) */
+  sendJsonMessage: (message: object) => boolean;
 };
 
 /**
@@ -260,6 +262,30 @@ export const createYClient = (
     };
   };
 
+  /**
+   * JSON 메시지를 텍스트로 전송
+   * y-websocket의 바이너리 모드를 우회하여 순수 텍스트로 전송
+   */
+  const sendJsonMessage = (message: object): boolean => {
+    const ws = provider.ws;
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      console.warn("[yjsClient] WebSocket not available or not open");
+      return false;
+    }
+
+    try {
+      const jsonString = JSON.stringify(message);
+      // TextEncoder를 사용하지 않고 직접 문자열로 전송
+      // WebSocket.send()에 문자열을 전달하면 텍스트 프레임으로 전송됨
+      ws.send(jsonString);
+      console.log("[yjsClient] Sent JSON message:", message);
+      return true;
+    } catch (error) {
+      console.error("[yjsClient] Failed to send JSON message:", error);
+      return false;
+    }
+  };
+
   return {
     doc,
     provider,
@@ -270,5 +296,6 @@ export const createYClient = (
     destroy,
     onJsonMessage,
     onCustomMessage,
+    sendJsonMessage,
   };
 };

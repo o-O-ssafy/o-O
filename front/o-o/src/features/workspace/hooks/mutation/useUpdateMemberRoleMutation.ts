@@ -28,24 +28,21 @@ export const useUpdateMemberRoleMutation = (yclient?: YClient | null) => {
       console.log("[useUpdateMemberRoleMutation] API success:", variables);
       showToast("멤버 권한이 변경되었습니다.", "success");
 
-      // WebSocket으로 role-changed 메시지 전송 (최소 정보만)
-      if (yclient?.provider?.ws) {
-        const ws = yclient.provider.ws;
+      // WebSocket으로 role-changed 메시지 전송 (sendJsonMessage 사용)
+      if (yclient) {
+        const message = {
+          type: 'role-changed',
+          targetUserId: variables.targetUserId,
+        };
 
-        // WebSocket 연결 상태 확인 (1 = OPEN)
-        if (ws.readyState === 1) {
-          const message = {
-            type: 'role-changed',
-            targetUserId: variables.targetUserId,
-          };
-
-          ws.send(JSON.stringify(message));
+        const sent = yclient.sendJsonMessage(message);
+        if (sent) {
           console.log("[useUpdateMemberRoleMutation] Sent role-changed via WebSocket:", message);
         } else {
-          console.warn("[useUpdateMemberRoleMutation] WebSocket not open, readyState:", ws.readyState);
+          console.warn("[useUpdateMemberRoleMutation] Failed to send role-changed message");
         }
       } else {
-        console.warn("[useUpdateMemberRoleMutation] YClient or WebSocket not available");
+        console.warn("[useUpdateMemberRoleMutation] YClient not available");
       }
 
       // Invalidate workspace queries to refresh data

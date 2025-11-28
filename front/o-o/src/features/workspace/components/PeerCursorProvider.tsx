@@ -13,18 +13,29 @@ type PeerCursor = {
   x: number;
   y: number;
   color?: string;
-  userId?: number; // 숫자형 userId 추가 (역할 변경 API용)
+  userId?: number;
   name?: string;
   email?: string;
   profileImage?: string;
-  role?: WorkspaceRole; // 워크스페이스 역할 추가
+  role?: WorkspaceRole;
+};
+
+type OnlinePeer = {
+  id: number;
+  userId?: number;
+  name?: string;
+  email?: string;
+  profileImage?: string;
+  color?: string;
+  role?: WorkspaceRole;
 };
 
 type PeerCursorContextValue = {
-  peers: PeerCursor[];
+  peers: PeerCursor[]; // cursor 있는 사용자만 (커서 오버레이용)
+  onlinePeers: OnlinePeer[]; // 모든 온라인 사용자 (StatusBox용)
 };
 
-const PeerCursorContext = createContext<PeerCursorContextValue>({ peers: [] });
+const PeerCursorContext = createContext<PeerCursorContextValue>({ peers: [], onlinePeers: [] });
 
 // Shared hook so canvases/overlays can read remote cursor metadata
 export const usePeerCursors = () => useContext(PeerCursorContext);
@@ -40,68 +51,71 @@ export function PeerCursorProvider({
   children,
 }: Readonly<PeerCursorProviderProps>) {
   const [peers, setPeers] = useState<PeerCursor[]>([]);
+  const [onlinePeers, setOnlinePeers] = useState<OnlinePeer[]>([]);
 
   useEffect(() => {
     if (!awareness) {
       setPeers([]);
+      setOnlinePeers([]);
       return;
     }
 
     const updatePeers = () => {
-      const next: PeerCursor[] = [];
+      const cursors: PeerCursor[] = [];
+      const online: OnlinePeer[] = [];
       const selfId = awareness.clientID;
-      const rawStates: Array<[number, unknown]> = [];
 
       for (const [id, state] of awareness.getStates()) {
-        rawStates.push([id, state]);
-
         if (id === selfId) {
           continue;
         }
 
-        const cursor = (
-          state as {
-            cursor?: PeerCursor;
-            user?: {
-              userId?: number;
-              name?: string;
-              email?: string;
-              profileImage?: string;
-              role?: WorkspaceRole;
-            };
-          }
-        ).cursor;
+        const stateObj = state as {
+          cursor?: { x: number; y: number; color?: string };
+          user?: {
+            userId?: number;
+            name?: string;
+            email?: string;
+            profileImage?: string;
+            color?: string;
+            role?: WorkspaceRole;
+          };
+        };
 
-        if (!cursor) {
-          continue;
+        const cursor = stateObj.cursor;
+        const userState = stateObj.user;
+
+        // 온라인 사용자 목록: user 정보가 있으면 추가 (cursor 없어도 됨)
+        if (userState) {
+          online.push({
+            id,
+            userId: userState.userId,
+            name: userState.name,
+            email: userState.email,
+            profileImage: userState.profileImage,
+            color: userState.color,
+            role: userState.role,
+          });
         }
 
-        const userState = (
-          state as {
-            user?: {
-              userId?: number;
-              name?: string;
-              email?: string;
-              profileImage?: string;
-              role?: WorkspaceRole;
-            };
-          }
-        ).user;
-        const peer = {
-          id,
-          x: cursor.x,
-          y: cursor.y,
-          color: cursor.color,
-          userId: userState?.userId, // userId 추가
-          name: userState?.name,
-          email: userState?.email,
-          profileImage: userState?.profileImage,
-          role: userState?.role, // role 추가
-        };
-        next.push(peer);
+        // 커서 오버레이: cursor 정보가 있어야만 추가
+        if (cursor) {
+          cursors.push({
+            id,
+            x: cursor.x,
+            y: cursor.y,
+            color: cursor.color,
+            userId: userState?.userId,
+            name: userState?.name,
+            email: userState?.email,
+            profileImage: userState?.profileImage,
+            role: userState?.role,
+          });
+        }
       }
 
-      setPeers(next);
+      setPeers(cursors);
+      setOnlinePeers(online);
     };
 
     awareness.on("change", updatePeers);
@@ -112,7 +126,7 @@ export function PeerCursorProvider({
     };
   }, [awareness]);
 
-  const value = useMemo(() => ({ peers }), [peers]);
+  const value = useMemo(() => ({ peers, onlinePeers }), [peers, onlinePeers]);
 
   return (
     <PeerCursorContext.Provider value={value}>

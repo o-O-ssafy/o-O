@@ -1,5 +1,5 @@
 // hooks/custom/useMediaUpload.ts
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import type { MediaData } from "../../types";
 
 export function useMediaUpload() {
@@ -28,9 +28,9 @@ export function useMediaUpload() {
     });
   };
 
-  const clearMedia = () => {
+  const clearMedia = useCallback(() => {
     setMediaData({ type: null });
-  };
+  }, []);
 
   const handlePaste = (e: React.ClipboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const text = e.clipboardData?.getData("text");

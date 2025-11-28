@@ -459,7 +459,13 @@ export function useYjsCollaboration(
                 nodes: data.nodes,
               });
             }
-          } else {
+          }
+          // 역할 변경 알림 처리
+          else if (data.type === "role-update") {
+            console.log("[useYjsCollaboration] role-update received via onJsonMessage, refetching workspace data");
+            queryClient.invalidateQueries({ queryKey: ["workspace", roomId] });
+          }
+          else {
             console.log("❓ Unknown message type:", data);
           }
         });

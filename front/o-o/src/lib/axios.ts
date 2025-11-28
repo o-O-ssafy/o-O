@@ -1,7 +1,7 @@
 import axios from "axios";
 import { API_BASE_URL } from "@/constants/baseUrl";
 import { clearAuth } from "@/store/slices/authSlice";
-import { clearUser } from "@/store/slices/userSlice";
+import { clearUser, fetchUserProfile } from "@/store/slices/userSlice";
 
 /* Redux store를 axios 설정 내부에서 직접 import 하지 않기 위해 사용되는 패턴 */
 
@@ -83,6 +83,9 @@ apiClient.interceptors.response.use(
             type: "auth/setAccessToken",
             payload: newAccessToken,
           });
+
+          // user 정보도 다시 가져오기
+          store.dispatch(fetchUserProfile());
         }
 
         // 실패했던 요청 재시도

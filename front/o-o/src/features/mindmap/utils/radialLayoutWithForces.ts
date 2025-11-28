@@ -81,6 +81,10 @@ export async function calculateRadialLayoutWithForces(
   // ===== 3. 각 depth별로 노드 배치 =====
   const positions = new Map<string, { x: number; y: number }>();
 
+  // depthRadiusMap 초기화 (루트는 depth 0, radius 0)
+  depthRadiusMap.clear();
+  depthRadiusMap.set(0, 0);
+
   // 루트 노드 배치 (중앙 고정)
   root.x = centerX;
   root.y = centerY;
@@ -173,6 +177,62 @@ function calculateDepths(root: TreeNode): void {
 }
 
 /**
+ * 각 depth별 최대 radius를 추적 (depth간 충분한 간격 보장용)
+ */
+const depthRadiusMap = new Map<number, number>();
+
+/**
+ * 두 노드가 겹치는지 확인
+ */
+function isPositionOverlapping(
+  newPos: { x: number; y: number },
+  existingPositions: Array<{ x: number; y: number }>,
+  minDistance: number = NODE_RADIUS * 3 // 240px 최소 거리
+): boolean {
+  for (const pos of existingPositions) {
+    const dx = newPos.x - pos.x;
+    const dy = newPos.y - pos.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    if (distance < minDistance) {
+      return true; // 겹침!
+    }
+  }
+  return false; // 안 겹침
+}
+
+/**
+ * 겹침을 피하도록 radius를 조정
+ */
+function adjustRadiusToAvoidOverlap(
+  centerX: number,
+  centerY: number,
+  angle: number,
+  initialRadius: number,
+  existingPositions: Array<{ x: number; y: number }>,
+  minDistance: number = NODE_RADIUS * 3
+): { x: number; y: number; radius: number } {
+  let radius = initialRadius;
+  const maxAttempts = 50;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const x = centerX + radius * Math.cos(angle);
+    const y = centerY + radius * Math.sin(angle);
+
+    if (!isPositionOverlapping({ x, y }, existingPositions, minDistance)) {
+      return { x, y, radius };
+    }
+
+    // 겹치면 radius를 50px씩 증가
+    radius += 50;
+  }
+
+  // 최대 시도 후에도 겹치면 그냥 반환
+  const x = centerX + radius * Math.cos(angle);
+  const y = centerY + radius * Math.sin(angle);
+  return { x, y, radius };
+}
+
+/**
  * 재귀적으로 자식 노드 배치
  */
 function positionChildrenRecursively(
@@ -188,11 +248,20 @@ function positionChildrenRecursively(
   const children = parent.children;
   const childCount = children.length;
 
-  // depth에 따른 반지름 계산
-  let radius = depth * baseRadius;
+  // depth에 따른 기본 반지름 계산
+  const basicRadius = depth * baseRadius;
+
+  // 이전 depth의 최대 radius 가져오기
+  const prevDepthRadius = depthRadiusMap.get(depth - 1) ?? 0;
+
+  // 최소 간격 400px 보장: 이전 depth + 400px
+  const minRadiusFromPrev = prevDepthRadius + 400;
+
+  // 기본 radius와 이전 depth 기반 최소값 중 큰 값 선택
+  let radius = Math.max(basicRadius, minRadiusFromPrev);
 
   // 🔥 노드가 겹치지 않을 최소 반지름 계산
-  const minNodeSpacing = NODE_RADIUS * 4; // 노드 간 최소 간격
+  const minNodeSpacing = NODE_RADIUS * 6; // 노드 간 최소 간격 (480px, 노드 직경 160px의 3배)
   const minCircumference = childCount * minNodeSpacing;
   const minRadius = minCircumference / (2 * Math.PI);
 
@@ -201,20 +270,43 @@ function positionChildrenRecursively(
     console.log(`[RadialLayout] 🔧 Depth ${depth}: radius adjusted to ${radius.toFixed(0)} for ${childCount} nodes`);
   }
 
+  // 현재 depth의 최대 radius 업데이트
+  const currentMaxRadius = depthRadiusMap.get(depth) ?? 0;
+  if (radius > currentMaxRadius) {
+    depthRadiusMap.set(depth, radius);
+  }
+
   if (depth === 1) {
     // ===== depth 1: 루트 중심 360도 원형 배치 =====
     const angleStep = (2 * Math.PI) / childCount;
+    const existingPositions = Array.from(positions.values());
 
     for (let i = 0; i < childCount; i++) {
       const child = children[i];
       const angle = i * angleStep; // 0부터 시작하여 균등 배치
 
+      // 🔥 겹침 체크 및 radius 자동 조정
+      const adjusted = adjustRadiusToAvoidOverlap(
+        centerX,
+        centerY,
+        angle,
+        radius,
+        existingPositions,
+        NODE_RADIUS * 3 // 240px 최소 거리
+      );
+
       child.angle = angle;
-      child.radius = radius;
-      child.x = centerX + radius * Math.cos(angle);
-      child.y = centerY + radius * Math.sin(angle);
+      child.radius = adjusted.radius;
+      child.x = adjusted.x;
+      child.y = adjusted.y;
 
       positions.set(child.id, { x: child.x, y: child.y });
+      existingPositions.push({ x: child.x, y: child.y });
+
+      // 현재 depth의 최대 radius 업데이트
+      if (adjusted.radius > (depthRadiusMap.get(depth) ?? 0)) {
+        depthRadiusMap.set(depth, adjusted.radius);
+      }
 
       // 재귀적으로 자식의 자식 배치
       positionChildrenRecursively(child, centerX, centerY, baseRadius, positions);
@@ -226,30 +318,80 @@ function positionChildrenRecursively(
     const parentAngle = parent.angle ?? 0;
 
     // 자식들을 부모 각도 중심으로 부채꼴 배치
+    // 최대 60도 (±30도) 범위로 제한
+    const maxSpread = Math.PI / 3; // 60도
     const minAnglePerChild = minNodeSpacing / radius; // 각도로 변환
-    const totalAngleSpread = Math.min(minAnglePerChild * childCount, Math.PI); // 최대 180도
+    const totalAngleSpread = Math.min(minAnglePerChild * childCount, maxSpread);
+    const existingPositions = Array.from(positions.values());
 
-    const halfSpread = totalAngleSpread / 2;
-    const angleStep = totalAngleSpread / childCount;
+    // 자식이 1개일 때는 부모와 같은 각도에 배치
+    if (childCount === 1) {
+      const child = children[0];
 
-    for (let i = 0; i < childCount; i++) {
-      const child = children[i];
+      // 🔥 겹침 체크 및 radius 자동 조정
+      const adjusted = adjustRadiusToAvoidOverlap(
+        centerX,
+        centerY,
+        parentAngle,
+        radius,
+        existingPositions,
+        NODE_RADIUS * 3 // 240px 최소 거리
+      );
 
-      // 부모 각도를 중심으로 좌우 대칭 배치
-      const childAngle = parentAngle - halfSpread + (i + 0.5) * angleStep;
-
-      child.angle = childAngle;
-      child.radius = radius;
-      child.x = centerX + radius * Math.cos(childAngle);
-      child.y = centerY + radius * Math.sin(childAngle);
+      child.angle = parentAngle;
+      child.radius = adjusted.radius;
+      child.x = adjusted.x;
+      child.y = adjusted.y;
 
       positions.set(child.id, { x: child.x, y: child.y });
 
+      // 현재 depth의 최대 radius 업데이트
+      if (adjusted.radius > (depthRadiusMap.get(depth) ?? 0)) {
+        depthRadiusMap.set(depth, adjusted.radius);
+      }
+
       // 재귀적으로 자식의 자식 배치
       positionChildrenRecursively(child, centerX, centerY, baseRadius, positions);
+    } else {
+      // 자식이 2개 이상일 때는 부채꼴 형태로 배치
+      const halfSpread = totalAngleSpread / 2;
+      const angleStep = totalAngleSpread / (childCount - 1); // 양 끝에 노드 배치
+
+      for (let i = 0; i < childCount; i++) {
+        const child = children[i];
+
+        // 부모 각도를 중심으로 좌우 대칭 배치
+        const childAngle = parentAngle - halfSpread + i * angleStep;
+
+        // 🔥 겹침 체크 및 radius 자동 조정
+        const adjusted = adjustRadiusToAvoidOverlap(
+          centerX,
+          centerY,
+          childAngle,
+          radius,
+          existingPositions,
+          NODE_RADIUS * 3 // 240px 최소 거리
+        );
+
+        child.angle = childAngle;
+        child.radius = adjusted.radius;
+        child.x = adjusted.x;
+        child.y = adjusted.y;
+
+        positions.set(child.id, { x: child.x, y: child.y });
+        existingPositions.push({ x: child.x, y: child.y });
+
+        // 현재 depth의 최대 radius 업데이트
+        if (adjusted.radius > (depthRadiusMap.get(depth) ?? 0)) {
+          depthRadiusMap.set(depth, adjusted.radius);
+        }
+
+        // 재귀적으로 자식의 자식 배치
+        positionChildrenRecursively(child, centerX, centerY, baseRadius, positions);
+      }
     }
 
-    console.log(`[RadialLayout] Depth ${depth}: ${childCount} nodes positioned around parent angle ${(parentAngle * 180 / Math.PI).toFixed(1)}° (radius: ${radius.toFixed(0)})`);
+    console.log(`[RadialLayout] Depth ${depth}: ${childCount} nodes positioned around parent angle ${(parentAngle * 180 / Math.PI).toFixed(1)}° (radius: ${radius.toFixed(0)}, spread: ${(totalAngleSpread * 180 / Math.PI).toFixed(1)}°)`);
   }
 }
 
