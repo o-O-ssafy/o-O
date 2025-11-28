@@ -54,10 +54,36 @@ public class WorkspaceController {
             @Parameter(hidden = true)
             @RequestHeader("X-USER-ID") Long userId,
 
-            @Parameter(description = "초기 프롬프트 (STT 텍스트 등, optional)", example = "인공지능 윤리 문제에 대해 생각해봅시다")
-            @RequestBody(required = false) String startPrompt) {
-        log.info("POST /workspace - Creating workspace for userId: {}, startPrompt: {}", userId, startPrompt);
-        return ResponseEntity.ok(workspaceService.create(userId, startPrompt));
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                    description = "워크스페이스 생성 정보 (optional, 트렌드 복제 시 필수)",
+                    required = false,
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = WorkspaceCreateRequest.class),
+                            examples = {
+                                    @ExampleObject(
+                                            name = "일반 생성",
+                                            description = "일반적인 워크스페이스 생성 (body 없음 또는 빈 객체)",
+                                            value = "{}"
+                                    ),
+                                    @ExampleObject(
+                                            name = "트렌드 복제",
+                                            description = "트렌드 페이지에서 키워드 복제",
+                                            value = """
+                                                    {
+                                                      "title": "애플리케이션",
+                                                      "type": "PERSONAL",
+                                                      "visibility": "PRIVATE",
+                                                      "keywords": ["모바일", "웹", "API"]
+                                                    }
+                                                    """
+                                    )
+                            }
+                    )
+            )
+            @RequestBody(required = false) WorkspaceCreateRequest request) {
+        log.info("POST /workspace - Creating workspace for userId: {}, request: {}", userId, request);
+        return ResponseEntity.ok(workspaceService.create(userId, request));
     }
 
     @Operation(

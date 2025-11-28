@@ -3,6 +3,7 @@ package com.ssafy.workspaceservice.service;
 import com.ssafy.workspaceservice.client.MindmapClient;
 import com.ssafy.workspaceservice.client.UserServiceClient;
 import com.ssafy.workspaceservice.dto.request.UserProfileRequest;
+import com.ssafy.workspaceservice.dto.request.WorkspaceCreateRequest;
 import com.ssafy.workspaceservice.dto.response.*;
 import com.ssafy.workspaceservice.entity.Workspace;
 import com.ssafy.workspaceservice.entity.WorkspaceMember;
@@ -38,14 +39,24 @@ public class WorkspaceService {
     private static final int MAX_MEMBERS = 6;
     private static final int DEFAULT_PAGE_SIZE = 20;
 
-    public WorkspaceResponse create(Long userId, String startPrompt) {
+    public WorkspaceResponse create(Long userId, WorkspaceCreateRequest request) {
         String INITIAL_TITLE = "제목 없음";
+
+        // request가 있으면 해당 값 사용, 없으면 기본값 사용
+        String title = (request != null && request.title() != null) ? request.title() : INITIAL_TITLE;
+        WorkspaceType type = (request != null && request.type() != null)
+                ? WorkspaceType.valueOf(request.type().toUpperCase())
+                : WorkspaceType.PERSONAL;
+        WorkspaceVisibility visibility = (request != null && request.visibility() != null)
+                ? WorkspaceVisibility.valueOf(request.visibility().toUpperCase())
+                : WorkspaceVisibility.PRIVATE;
+        String startPrompt = (request != null) ? request.toStartPrompt() : null;
 
         Workspace workspace = Workspace.builder()
                 .theme(WorkspaceTheme.PASTEL)
-                .type(WorkspaceType.PERSONAL)
-                .visibility(WorkspaceVisibility.PRIVATE)
-                .title(INITIAL_TITLE)
+                .type(type)
+                .visibility(visibility)
+                .title(title)
                 .startPrompt(startPrompt)
                 .token(UUID.randomUUID().toString())
                 .build();
