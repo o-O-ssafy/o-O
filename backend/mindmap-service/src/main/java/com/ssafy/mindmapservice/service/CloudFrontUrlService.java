@@ -58,7 +58,7 @@ public class CloudFrontUrlService {
             }
 
             // CloudFront URL 생성
-            String resourceUrl = "https://" + cloudFrontDomain + "/mindmap/image/" + s3Key;
+            String resourceUrl = "https://" + cloudFrontDomain + "/" + s3Key;
 
             // 만료 시간 계산
 //            Date expiresOn = new Date(System.currentTimeMillis() + duration.toMillis());
