@@ -19,13 +19,10 @@ public record WorkspaceCreateRequest(
 ) {
     /**
      * startPrompt 생성
-     * 트렌드 복제 시: "애플리케이션 (from trends: 모바일, 웹, API)"
+     * title이 있으면 그대로 사용
      * 일반 생성 시: null
      */
     public String toStartPrompt() {
-        if (keywords != null && !keywords.isEmpty()) {
-            return title + " (from trends: " + String.join(", ", keywords) + ")";
-        }
-        return null;
+        return title;
     }
 }
