@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { SPEAKING_THRESHOLD } from '@/constants/voiceChat';
+import { SPEAKING_THRESHOLD, SPEAKING_HANGOVER_MS, MIN_SPEAKING_MS } from '@/constants/voiceChat';
 import type { VoiceState, ClientMessage } from '../../types/voice.types';
 
 type SendMessageFn = (message: ClientMessage) => void;
@@ -16,6 +16,11 @@ export function useVoiceState(
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animationFrameRef = useRef<number | null>(null);
 
+  // References to track speaking timing
+  const lastAboveThresholdRef = useRef<number | null>(null);
+  const speakingSinceRef = useRef<number | null>(null);
+
+  
   // Toggle mute/unmute
   const toggleMute = useCallback(() => {
     if (!localStream) return;
@@ -77,31 +82,63 @@ export function useVoiceState(
     const dataArray = new Uint8Array(analyser.frequencyBinCount);
     let previousSpeakingState = false;
 
-    // Analyze audio levels
+
+    // Analyze audio levels;
     const detectSpeaking = () => {
       if (!analyserRef.current) return;
 
       analyser.getByteFrequencyData(dataArray);
+      const average = dataArray.reduce((sum, v) => sum + v, 0) / dataArray.length;
 
-      // Calculate average volume
-      const average = dataArray.reduce((sum, value) => sum + value, 0) / dataArray.length;
+      const now = performance.now();
+      const aboveThreshold = average > SPEAKING_THRESHOLD;
 
-      const isCurrentlySpeaking = average > SPEAKING_THRESHOLD;
+      if (aboveThreshold) {
+        if (!speakingSinceRef.current) {
+          // threshold를 처음 넘은 시점 기록
+          speakingSinceRef.current = now;
+        }
+        lastAboveThresholdRef.current = now;
+      }
 
-      // Only update and broadcast if speaking state changed
-      if (isCurrentlySpeaking !== previousSpeakingState) {
-        previousSpeakingState = isCurrentlySpeaking;
-        setIsSpeaking(isCurrentlySpeaking);
+      let nextSpeakingState = previousSpeakingState;
+
+      // 1) 아직 speaking이 아니었는데, 일정 시간 이상 계속 threshold 위에 있음 → speaking 시작
+      if (!previousSpeakingState && speakingSinceRef.current) {
+        if (now - speakingSinceRef.current > MIN_SPEAKING_MS) {
+          nextSpeakingState = true;
+        }
+      }
+
+      // 2) speaking 중인데, 마지막으로 threshold를 넘은 이후로 오래 지남 → speaking 종료
+      if (previousSpeakingState && lastAboveThresholdRef.current) {
+        if (now - lastAboveThresholdRef.current > SPEAKING_HANGOVER_MS) {
+          nextSpeakingState = false;
+          speakingSinceRef.current = null;
+          lastAboveThresholdRef.current = null;
+        }
+      }
+
+      if (nextSpeakingState !== previousSpeakingState) {
+        previousSpeakingState = nextSpeakingState;
+        setIsSpeaking(nextSpeakingState);
 
         if (isConnected) {
           sendMessage({
             type: 'voice-state',
             voiceState: {
               muted: isMuted,
-              speaking: isCurrentlySpeaking,
+              speaking: nextSpeakingState,
             },
           });
         }
+
+        console.log(
+          '[VoiceState] Speaking state changed:',
+          nextSpeakingState,
+          'avg:',
+          average.toFixed(2)
+        );
       }
 
       animationFrameRef.current = requestAnimationFrame(detectSpeaking);

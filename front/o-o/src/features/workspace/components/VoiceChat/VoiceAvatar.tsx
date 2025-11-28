@@ -2,23 +2,11 @@ import React from "react";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import CustomTooltip from "@/shared/ui/CustomTooltip";
 
-// 고정 색상 6가지
-const VOICE_COLORS = [
-  "#F24822", // 빨강
-  "#57E257", // 초록
-  "#FF824D", // 주황
-  "#29DFFF", // 하늘
-  "#FF50F0", // 분홍
-  "#FFC60B", // 노랑
-] as const;
-
 interface VoiceAvatarProps {
   avatar: string;
   name: string;
   isSpeaking?: boolean;
-  voiceColor?: string;
-  colorIndex?: number;
-  index: number;
+  voiceColor: string;
 }
 
 const VoiceAvatar: React.FC<VoiceAvatarProps> = ({
@@ -26,11 +14,8 @@ const VoiceAvatar: React.FC<VoiceAvatarProps> = ({
   name,
   isSpeaking = false,
   voiceColor,
-  colorIndex,
-  index,
 }) => {
-  const finalColorIndex = colorIndex ?? index % VOICE_COLORS.length;
-  const color = voiceColor ?? VOICE_COLORS[finalColorIndex];
+  const color = voiceColor;
 
   return (
     <CustomTooltip content={<span className="text-sm">{name}</span>}>
@@ -44,8 +29,11 @@ const VoiceAvatar: React.FC<VoiceAvatarProps> = ({
 
         {isSpeaking && (
           <div
-            className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full"
-            style={{ backgroundColor: color }}
+            className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full animate-pulse"
+            style={{
+              backgroundColor: color,
+              boxShadow: `0 0 8px ${color}, 0 0 12px ${color}40`
+            }}
           >
             <div
               className="absolute inset-0 rounded-full animate-ping"

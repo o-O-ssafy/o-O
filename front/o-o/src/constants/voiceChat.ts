@@ -20,7 +20,10 @@ export const ICE_SERVERS: RTCIceServer[] = [
 ];
 
 // Speaking detection threshold (0-255 scale)
+// 권장 범위: 15-30 (낮을수록 민감함, 높을수록 큰 소리만 감지)
 export const SPEAKING_THRESHOLD = 30;
+export const SPEAKING_HANGOVER_MS = 300;   // 말 멈춘 후 300ms 정도는 유지
+export const MIN_SPEAKING_MS = 120;        // 짧은 픽 노이즈는 무시
 
 // Speaking detection check interval (ms)
 export const SPEAKING_CHECK_INTERVAL = 100;

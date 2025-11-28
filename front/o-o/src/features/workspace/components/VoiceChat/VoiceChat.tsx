@@ -442,17 +442,35 @@ const VoiceChat: React.FC<VoiceChatProps> = ({
   // Build user list with voice states
   const voiceUsers = useMemo(() => {
     // Map participants to user display data
-    const users = participants.map((participant, index) => {
+    const users = participants.map((participant) => {
       // Check if this participant is current user
       const isCurrentUser = participant.userId === currentUser?.id.toString();
 
       // Find peer data for avatar/name (for other users)
       const peer = peers.find((p) => p.userId?.toString() === participant.userId);
 
-      // Determine if this participant is speaking
+      // 1) speaking 기준: 현재 유저는 로컬 isSpeaking, 나머지는 서버 값
       const isUserSpeaking = isCurrentUser
         ? isSpeaking
         : participant.voiceState?.speaking ?? false;
+
+      // 2) muted 기준: 현재 유저는 로컬 isMuted, 나머지는 서버 값
+      const userMuted = isCurrentUser
+        ? isMuted
+        : participant.voiceState?.muted ?? false;
+
+      const finalIsSpeaking = isUserSpeaking && !userMuted;
+
+      // (옵션) 디버깅
+      if (isCurrentUser) {
+        console.log("[VoiceChat] me:", {
+          isSpeakingLocal: isSpeaking,
+          isMutedLocal: isMuted,
+          mutedFromServer: participant.voiceState?.muted,
+          userMuted,
+          finalIsSpeaking,
+        });
+      }
 
       return {
         id: participant.userId,
@@ -462,16 +480,13 @@ const VoiceChat: React.FC<VoiceChatProps> = ({
         avatar: isCurrentUser
           ? getProfileImageUrl(currentUser.profileImage)
           : getProfileImageUrl(peer?.profileImage),
-        isSpeaking: isUserSpeaking && !(participant.voiceState?.muted ?? false),
-        voiceColor: isCurrentUser
-          ? cursorColor
-          : peer?.color,
-        colorIndex: index % 6,
+        isSpeaking: finalIsSpeaking,
+        voiceColor: (isCurrentUser ? cursorColor : peer?.color) ?? "#808080",
       };
     });
 
     return users;
-  }, [participants, peers, currentUser, isSpeaking, cursorColor]);
+  }, [participants, peers, currentUser, isSpeaking, isMuted, cursorColor]);
 
   return (
     <>
@@ -481,15 +496,13 @@ const VoiceChat: React.FC<VoiceChatProps> = ({
       >
         {/* Users Avatars */}
         <div className="flex items-center gap-3">
-          {voiceUsers.map((user, index) => (
+          {voiceUsers.map((user) => (
             <VoiceAvatar
               key={user.id}
               avatar={user.avatar}
               name={user.name}
               isSpeaking={user.isSpeaking}
               voiceColor={user.voiceColor}
-              colorIndex={user.colorIndex}
-              index={index}
             />
           ))}
         </div>

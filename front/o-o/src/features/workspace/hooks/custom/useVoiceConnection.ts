@@ -143,12 +143,27 @@ export function useVoiceConnection(
               break;
 
             case 'voice-state':
+              setParticipants(prev =>
+                prev.map(participant =>
+                  participant.userId === message.userId
+                    ? {
+                        ...participant,
+                        voiceState: {
+                          muted: message.voiceState.muted,
+                          speaking: message.voiceState.speaking,
+                        },
+                      }
+                    : participant
+                )
+              );
+
               handlersRef.current.onVoiceState?.(
                 message.userId,
                 message.voiceState.muted,
                 message.voiceState.speaking
               );
               break;
+
 
             case 'peer-transcript':
               handlersRef.current.onPeerTranscript?.(

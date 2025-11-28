@@ -71,23 +71,23 @@ export const createYClient = (
     console.log("[WebSocket] Wrapping onmessage handler");
 
     // 🔍 DEBUG: WebSocket send 래핑하여 송신 메시지 로깅
-    const originalSend = provider.ws.send.bind(provider.ws);
-    provider.ws.send = (data: string | ArrayBufferLike | Blob | ArrayBufferView) => {
-      if (data instanceof ArrayBuffer || data instanceof Uint8Array) {
-        console.log("📤 [WebSocket] Sending binary message:", {
-          type: "binary",
-          size: data instanceof ArrayBuffer ? data.byteLength : data.length,
-          timestamp: new Date().toISOString(),
-        });
-      } else if (typeof data === "string") {
-        console.log("📤 [WebSocket] Sending text message:", {
-          type: "text",
-          preview: data.substring(0, 100),
-          timestamp: new Date().toISOString(),
-        });
-      }
-      return originalSend(data);
-    };
+    // const originalSend = provider.ws.send.bind(provider.ws);
+    // provider.ws.send = (data: string | ArrayBufferLike | Blob | ArrayBufferView) => {
+    //   if (data instanceof ArrayBuffer || data instanceof Uint8Array) {
+    //     console.log("📤 [WebSocket] Sending binary message:", {
+    //       type: "binary",
+    //       size: data instanceof ArrayBuffer ? data.byteLength : data.length,
+    //       timestamp: new Date().toISOString(),
+    //     });
+    //   } else if (typeof data === "string") {
+    //     console.log("📤 [WebSocket] Sending text message:", {
+    //       type: "text",
+    //       preview: data.substring(0, 100),
+    //       timestamp: new Date().toISOString(),
+    //     });
+    //   }
+    //   return originalSend(data);
+    // };
 
     const originalOnMessage = provider.ws.onmessage;
     provider.ws.onmessage = (event) => {
