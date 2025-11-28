@@ -41,7 +41,38 @@ public class NodeEventConsumer {
             // ADD에서 sync 이벤트를 보내기 위해 잠시 모아둘 리스트
             List<Map<String, Object>> createdNodes = new java.util.ArrayList<>();
 
+            // 🔥 임시 ID → 실제 nodeId 매핑 테이블 (트렌드 복제용)
+            Map<String, Long> tempIdToNodeIdMap = new HashMap<>();
 
+            // 🔥 1st pass: 모든 ADD 노드의 clientKey → nodeId 매핑 생성
+            for (Map<String, Object> event : events) {
+                String operation = (String) event.get("operation");
+                if (!"ADD".equals(operation)) continue;
+
+                Object workspaceIdObj = event.get("workspaceId");
+                Long workspaceId = getLong(workspaceIdObj);
+
+                String clientKey = (String) event.get("id");
+
+                Object nodeIdObj = event.get("nodeId");
+                Long nodeId = getLongOrNull(nodeIdObj);
+
+                if (nodeId == null) {
+                    nodeId = sequenceGeneratorService.generateNextNodeId(workspaceId);
+                    log.debug("Generated nodeId {} for clientKey {}. workspaceId={}", nodeId, clientKey, workspaceId);
+                }
+
+                // 매핑 테이블에 저장
+                if (clientKey != null) {
+                    tempIdToNodeIdMap.put(clientKey, nodeId);
+                    log.debug("Mapped temp ID: {} → nodeId: {}", clientKey, nodeId);
+                }
+
+                // event에 실제 nodeId 저장 (2nd pass에서 사용)
+                event.put("resolvedNodeId", nodeId);
+            }
+
+            // 🔥 2nd pass: 실제 처리 (parentId 해결 포함)
             for (Map<String, Object> event : events) {
                 String operation = (String) event.get("operation");
 
@@ -52,18 +83,24 @@ public class NodeEventConsumer {
                     case "ADD": {
 
                         String clientKey = (String) event.get("id");
-
-                        Object nodeIdObj = event.get("nodeId");
-                        Long nodeId = getLongOrNull(nodeIdObj); // null 허용 버전
-
-                        if (nodeId == null) {
-                            // 🔥 여기서 시퀀스로 새로운 nodeId 생성
-                            nodeId = sequenceGeneratorService.generateNextNodeId(workspaceId);
-                            log.debug("Generated nodeId {} for ADD without nodeId. workspaceId={}", nodeId, workspaceId);
-                        }
+                        Long nodeId = (Long) event.get("resolvedNodeId");
 
                         Object parentIdObj = event.get("parentId");
-                        Long parentId = safeGetLongOrNull(parentIdObj, "parentId", workspaceId);
+                        Long parentId;
+
+                        // parentId 해결: 임시 ID면 매핑 테이블에서 실제 nodeId로 변환
+                        if (parentIdObj instanceof String) {
+                            String parentTempId = (String) parentIdObj;
+                            parentId = tempIdToNodeIdMap.get(parentTempId);
+                            if (parentId != null) {
+                                log.debug("Resolved parentId: {} → {}", parentTempId, parentId);
+                            } else {
+                                log.warn("Could not resolve temp parentId: {}, setting to null", parentTempId);
+                                parentId = null;
+                            }
+                        } else {
+                            parentId = safeGetLongOrNull(parentIdObj, "parentId", workspaceId);
+                        }
 
                         LocalDateTime now = LocalDateTime.now();
 
