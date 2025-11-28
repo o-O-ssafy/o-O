@@ -46,6 +46,11 @@ public class CloudFrontUrlService {
             return null;
         }
 
+        if (s3Key.startsWith("http://") || s3Key.startsWith("https://")) {
+            log.warn("[CloudFrontUrlService] generateSignedUrl called with full URL, returning as-is: {}", s3Key);
+            return s3Key;
+        }
+
         try {
             // Private Key 로드 (캐싱)
             if (privateKey == null) {
