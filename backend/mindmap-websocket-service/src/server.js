@@ -437,6 +437,45 @@ function handleRoleChanged(workspaceId, senderId, data) {
 
 /**
  * ============================================
+ * 공개여부 변경 이벤트 핸들러
+ * ============================================
+ *
+ * 메인테이너가 워크스페이스의 공개 여부를 변경하면 호출됨
+ * 해당 워크스페이스의 모든 사용자에게 visibility-update 이벤트를 브로드캐스트
+ *
+ * @param {string} workspaceId - workspace ID
+ * @param {number|null} senderId - 이벤트를 보낸 사용자 ID
+ * @param {object} data - 메시지 데이터 (현재는 사용하지 않음)
+ */
+function handleVisibilityChanged(workspaceId, senderId, data) {
+  logger.info(`[VisibilityChanged] Visibility change event received`, {
+    workspaceId,
+    senderId: senderId || 'anonymous',
+    rawData: data,
+  });
+
+  // 워크스페이스의 모든 사용자에게 visibility-update 이벤트 브로드캐스트
+  const sentCount = sendToWorkspace(workspaceId, {
+    type: 'visibility-update',
+  });
+
+  if (sentCount > 0) {
+    logger.info(`[VisibilityChanged] Visibility update notification broadcasted successfully`, {
+      workspaceId,
+      senderId: senderId || 'anonymous',
+      sentCount,
+    });
+  } else {
+    logger.warn(`[VisibilityChanged] Visibility update notification failed - no users connected`, {
+      workspaceId,
+      senderId: senderId || 'anonymous',
+      reason: 'No users found in workspace connections',
+    });
+  }
+}
+
+/**
+ * ============================================
  * 음성 채팅 WebSocket 연결 핸들러
  * ============================================
  */
@@ -773,11 +812,19 @@ function handleYjsConnection(conn, req, url) {
                   handleRoleChanged(workspaceId, userId, data);
                   break;
 
+              case 'visibility-changed':
+                  logger.info(`[YJS] Routing to handleVisibilityChanged`, {
+                      workspaceId,
+                      userId,
+                  });
+                  handleVisibilityChanged(workspaceId, userId, data);
+                  break;
+
               default:
                   logger.warn(`[YJS] Unknown custom message type: ${data.type}`, {
                       workspaceId,
                       userId: userId || 'anonymous',
-                      availableTypes: ['role-changed'],
+                      availableTypes: ['role-changed', 'visibility-changed'],
                       receivedData: data,
                   });
           }
