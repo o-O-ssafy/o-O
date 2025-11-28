@@ -44,7 +44,7 @@ class VoiceRoom {
       conn,
       userId,
       voiceState: {
-        muted: true,  // 기본값: 음소거
+        muted: false,  // 기본값: 음소거
         speaking: false,
       },
     });
