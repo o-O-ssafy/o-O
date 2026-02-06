@@ -210,8 +210,8 @@ class MindmapRepositoryImpl implements MindmapRepository {
 
         // 거리를 자식 개수에 따라 동적으로 계산
         // 기본 거리 + (자식 개수에 따른 추가 거리)
-        final baseRadius = level * 150.0; // 기본 레벨별 거리 (노드 크기 128px 대비 여유있게)
-        final childCountBonus = (siblingCount - 1) * 20.0; // 자식 1개당 20px 추가
+        final baseRadius = level * 75.0; // 기본 레벨별 거리
+        final childCountBonus = (siblingCount - 1) * 10.0; // 자식 1개당 10px 추가
         final radius = baseRadius + childCountBonus;
 
         // 섹터 계산
